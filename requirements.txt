@@ -1,0 +1,24 @@
+
+
+I want a GUI that helps me decide the best placement of all the components in my laser beam path. 
+
+This laser beam path can be simplified down to a single line that travels in straight lines.
+The laser beam path may have more than 1 input paths that will be combined at a particular component.
+The laser beam is allowed to cross itself if needed.
+
+Each component in the path will have different kinds of interactions with the laser beam. 
+Some will reflect 100% of the beam, some will transmit 100% of the beam, and some will reflect some percentage and transmit the rest.
+Each component will also have different properties such as:
+- Mass 
+- Size
+- Reflectance
+- Angle
+- Path length from previous component (this is the distance the laser beam has traveled since the previous component)
+
+There should be global constraints such as:
+- keep out areas where components cannot be placed. 
+- locations of specific components
+- location of 'mounting zone'
+
+Combining the mass and location of all the components, a center of mass should be calculated and shown with a symbol to the user.
+The end goal is to have the center of mass within the 'mounting zone', satisfy all global constraints, and keep all components close together (while still allowing room for manual adjustments during optical alignment.)

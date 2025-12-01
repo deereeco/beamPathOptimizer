@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beam Path Optimizer</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Top Toolbar -->
+        <header id="toolbar">
+            <div class="toolbar-left">
+                <span class="app-title">Beam Path Optimizer</span>
+            </div>
+            <div class="toolbar-center">
+                <button id="btn-new" class="toolbar-btn" title="New Project">New</button>
+                <button id="btn-open" class="toolbar-btn" title="Open Project">Open</button>
+                <button id="btn-save" class="toolbar-btn" title="Save Project">Save</button>
+                <div class="toolbar-separator"></div>
+                <button id="btn-undo" class="toolbar-btn" title="Undo (Ctrl+Z)">Undo</button>
+                <button id="btn-redo" class="toolbar-btn" title="Redo (Ctrl+Y)">Redo</button>
+            </div>
+            <div class="toolbar-right">
+                <label>
+                    Workspace:
+                    <input type="number" id="workspace-width" value="600" min="100" max="2000" step="50">
+                    x
+                    <input type="number" id="workspace-height" value="600" min="100" max="2000" step="50">
+                    mm
+                </label>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main id="main-content">
+            <!-- Left Panel - Tools -->
+            <aside id="tools-panel">
+                <section class="panel-section">
+                    <h3>Tools</h3>
+                    <div class="tool-group">
+                        <button class="tool-btn active" data-tool="select" title="Select (V)">
+                            <span class="tool-icon">&#9654;</span>
+                            <span class="tool-label">Select</span>
+                        </button>
+                        <button class="tool-btn" data-tool="pan" title="Pan (H)">
+                            <span class="tool-icon">&#9995;</span>
+                            <span class="tool-label">Pan</span>
+                        </button>
+                        <button class="tool-btn" data-tool="connect" title="Connect Beam (C)">
+                            <span class="tool-icon">&#10132;</span>
+                            <span class="tool-label">Connect</span>
+                        </button>
+                    </div>
+                </section>
+
+                <section class="panel-section">
+                    <h3>Components</h3>
+                    <div class="component-palette">
+                        <button class="component-btn" data-component="source" title="Laser Source">
+                            <span class="comp-icon source"></span>
+                            <span class="comp-label">Source</span>
+                        </button>
+                        <button class="component-btn" data-component="mirror" title="Mirror (100% reflection)">
+                            <span class="comp-icon mirror"></span>
+                            <span class="comp-label">Mirror</span>
+                        </button>
+                        <button class="component-btn" data-component="beam_splitter" title="Beam Splitter">
+                            <span class="comp-icon beam_splitter"></span>
+                            <span class="comp-label">Splitter</span>
+                        </button>
+                        <button class="component-btn" data-component="lens" title="Lens">
+                            <span class="comp-icon lens"></span>
+                            <span class="comp-label">Lens</span>
+                        </button>
+                        <button class="component-btn" data-component="waveplate" title="Waveplate">
+                            <span class="comp-icon waveplate"></span>
+                            <span class="comp-label">Waveplate</span>
+                        </button>
+                        <button class="component-btn" data-component="filter" title="Filter">
+                            <span class="comp-icon filter"></span>
+                            <span class="comp-label">Filter</span>
+                        </button>
+                        <button class="component-btn" data-component="detector" title="Detector">
+                            <span class="comp-icon detector"></span>
+                            <span class="comp-label">Detector</span>
+                        </button>
+                    </div>
+                </section>
+
+                <section class="panel-section">
+                    <h3>Zones</h3>
+                    <div class="tool-group">
+                        <button class="tool-btn" data-tool="keepout" title="Draw Keep-Out Zone">
+                            <span class="tool-icon zone-keepout"></span>
+                            <span class="tool-label">Keep-Out</span>
+                        </button>
+                        <button class="tool-btn" data-tool="mounting" title="Define Mounting Zone">
+                            <span class="tool-icon zone-mount"></span>
+                            <span class="tool-label">Mount Zone</span>
+                        </button>
+                    </div>
+                </section>
+            </aside>
+
+            <!-- Center - Canvas -->
+            <div id="canvas-container">
+                <canvas id="main-canvas"></canvas>
+                <div id="zoom-controls">
+                    <button id="zoom-in" title="Zoom In (+)">+</button>
+                    <span id="zoom-level">100%</span>
+                    <button id="zoom-out" title="Zoom Out (-)">-</button>
+                    <button id="zoom-fit" title="Fit to View">Fit</button>
+                </div>
+            </div>
+
+            <!-- Right Panel - Properties -->
+            <aside id="properties-panel">
+                <section class="panel-section" id="selection-info">
+                    <h3>Properties</h3>
+                    <div id="no-selection" class="empty-state">
+                        <p>No selection</p>
+                        <p class="hint">Click a component or zone to edit its properties. Ctrl+click or drag to select multiple components.</p>
+                    </div>
+                    <div id="component-properties" class="hidden">
+                        <div class="property-group">
+                            <label class="property-label">Name</label>
+                            <input type="text" id="prop-name" class="property-input">
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Type</label>
+                            <span id="prop-type" class="property-value"></span>
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Position</label>
+                            <div class="position-inputs">
+                                <label>X: <input type="number" id="prop-x" class="property-input small"> mm</label>
+                                <label>Y: <input type="number" id="prop-y" class="property-input small"> mm</label>
+                            </div>
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Angle</label>
+                            <input type="range" id="prop-angle-slider" min="0" max="360" value="0" class="angle-slider">
+                            <input type="number" id="prop-angle" class="property-input small" min="0" max="360"> deg
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Mass</label>
+                            <input type="number" id="prop-mass" class="property-input small" min="0" step="10"> g
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Size</label>
+                            <div class="size-inputs">
+                                <label>W: <input type="number" id="prop-width" class="property-input small" min="1"> mm</label>
+                                <label>H: <input type="number" id="prop-height" class="property-input small" min="1"> mm</label>
+                            </div>
+                        </div>
+                        <div class="property-group" id="optical-properties">
+                            <label class="property-label">Reflectance</label>
+                            <input type="range" id="prop-reflectance-slider" min="0" max="100" value="100">
+                            <span id="prop-reflectance-value">100</span>%
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Fixed Position</label>
+                            <input type="checkbox" id="prop-fixed">
+                            <span class="checkbox-hint">Locked from optimizer</span>
+                        </div>
+                        <div class="property-group mount-zone-group">
+                            <label class="property-label">Mount Zone</label>
+                            <div class="mount-zone-controls">
+                                <label class="mount-zone-toggle">
+                                    <input type="checkbox" id="prop-mount-enabled">
+                                    <span>Enable keep-out zone for mount</span>
+                                </label>
+                                <div class="mount-zone-details" id="mount-details-controls">
+                                    <div class="mount-zone-row">
+                                        <span class="mount-zone-label">Padding:</span>
+                                        <label>X: <input type="number" id="prop-mount-padding-x" class="property-input small" min="0" max="200" value="10"> mm</label>
+                                        <label>Y: <input type="number" id="prop-mount-padding-y" class="property-input small" min="0" max="200" value="10"> mm</label>
+                                    </div>
+                                    <div class="mount-zone-row">
+                                        <span class="mount-zone-label">Offset:</span>
+                                        <label>X: <input type="number" id="prop-mount-offset-x" class="property-input small" min="-200" max="200" value="0"> mm</label>
+                                        <label>Y: <input type="number" id="prop-mount-offset-y" class="property-input small" min="-200" max="200" value="0"> mm</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="property-actions">
+                            <button id="btn-duplicate" class="action-btn">Duplicate</button>
+                            <button id="btn-delete" class="action-btn danger">Delete</button>
+                        </div>
+                    </div>
+                    <div id="zone-properties" class="hidden">
+                        <div class="property-group">
+                            <label class="property-label">Name</label>
+                            <input type="text" id="zone-prop-name" class="property-input">
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Type</label>
+                            <span id="zone-prop-type" class="property-value"></span>
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Position</label>
+                            <div class="position-inputs">
+                                <label>X: <input type="number" id="zone-prop-x" class="property-input small"> mm</label>
+                                <label>Y: <input type="number" id="zone-prop-y" class="property-input small"> mm</label>
+                            </div>
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Size</label>
+                            <div class="size-inputs">
+                                <label>W: <input type="number" id="zone-prop-width" class="property-input small" min="1"> mm</label>
+                                <label>H: <input type="number" id="zone-prop-height" class="property-input small" min="1"> mm</label>
+                            </div>
+                        </div>
+                        <div class="property-group" id="zone-active-group">
+                            <label class="property-label">Active</label>
+                            <input type="checkbox" id="zone-prop-active" checked>
+                            <span class="checkbox-hint">Zone is enabled</span>
+                        </div>
+                        <div class="property-actions">
+                            <button id="btn-delete-zone" class="action-btn danger">Delete Zone</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel-section" id="optimizer-section">
+                    <h3>Optimizer</h3>
+                    <div class="optimizer-controls">
+                        <div class="weight-slider">
+                            <label>Center of Mass</label>
+                            <input type="range" id="weight-com" min="0" max="100" value="50">
+                            <span class="weight-value">50%</span>
+                        </div>
+                        <div class="weight-slider">
+                            <label>Footprint</label>
+                            <input type="range" id="weight-footprint" min="0" max="100" value="25">
+                            <span class="weight-value">25%</span>
+                        </div>
+                        <div class="weight-slider">
+                            <label>Path Length</label>
+                            <input type="range" id="weight-path" min="0" max="100" value="25">
+                            <span class="weight-value">25%</span>
+                        </div>
+                        <div class="optimizer-buttons" id="opt-buttons-start">
+                            <button id="btn-optimize" class="action-btn primary">Start Optimization</button>
+                        </div>
+                        <div class="optimizer-buttons hidden" id="opt-buttons-running">
+                            <button id="btn-pause-optimize" class="action-btn">Pause</button>
+                            <button id="btn-stop-optimize" class="action-btn danger">Stop</button>
+                        </div>
+                        <div class="optimizer-buttons hidden" id="opt-buttons-paused">
+                            <button id="btn-resume-optimize" class="action-btn primary">Resume</button>
+                            <button id="btn-stop-optimize-2" class="action-btn danger">Stop</button>
+                        </div>
+                        <div class="optimizer-buttons hidden" id="opt-buttons-finished">
+                            <button id="btn-accept-optimize" class="action-btn primary">Accept</button>
+                            <button id="btn-revert-optimize" class="action-btn danger">Revert</button>
+                        </div>
+                        <div id="optimizer-progress" class="hidden">
+                            <progress id="opt-progress-bar" max="100" value="0"></progress>
+                            <div id="opt-status-text" class="opt-status-text">Starting optimization...</div>
+                            <div class="opt-stats-grid">
+                                <div class="opt-stat">
+                                    <span class="opt-stat-label">Improvement</span>
+                                    <span class="opt-stat-value" id="opt-improvement">0%</span>
+                                </div>
+                                <div class="opt-stat">
+                                    <span class="opt-stat-label">Iterations</span>
+                                    <span class="opt-stat-value" id="opt-iteration">0</span>
+                                </div>
+                                <div class="opt-stat">
+                                    <span class="opt-stat-label">CoM Distance</span>
+                                    <span class="opt-stat-value" id="opt-com-cost">-</span>
+                                </div>
+                                <div class="opt-stat">
+                                    <span class="opt-stat-label">Violations</span>
+                                    <span class="opt-stat-value" id="opt-penalty">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </aside>
+        </main>
+
+        <!-- Status Bar -->
+        <footer id="status-bar">
+            <div class="status-item" id="status-com">
+                <span class="status-label">CoM:</span>
+                <span class="status-value" id="com-position">(-, -)</span>
+            </div>
+            <div class="status-item" id="status-mount">
+                <span class="status-label">Mount Zone:</span>
+                <span class="status-value" id="mount-status">Not defined</span>
+            </div>
+            <div class="status-item" id="status-violations">
+                <span class="status-label">Violations:</span>
+                <span class="status-value" id="violation-count">0</span>
+            </div>
+            <div class="status-item" id="status-components">
+                <span class="status-label">Components:</span>
+                <span class="status-value" id="component-count">0</span>
+            </div>
+            <div class="status-spacer"></div>
+            <div class="status-item" id="status-zoom">
+                <span class="status-label">Zoom:</span>
+                <span class="status-value" id="zoom-percent">100%</span>
+            </div>
+            <div class="status-item" id="status-cursor">
+                <span class="status-value" id="cursor-position">(-, -)</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Hidden file input for loading -->
+    <input type="file" id="file-input" accept=".json" style="display: none;">
+
+    <!-- Scripts -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
