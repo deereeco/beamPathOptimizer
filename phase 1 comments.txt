@@ -1,8 +1,0 @@
-Issues or things that are missing are:
-- the zones don't have their own properties. The zones should behave similarly to the components such that a user can place them and then move them later or edit their size, location, or delete them.
-- there should be a symbol in the bottom left of the center canvas showing the user which direction is x and which is y
-- i should also have the ability to select multiple components via ctrl+click or click and drag a selection bounding box. The selected components should then show their common properties in the properties pane on the right so that the user can change the component properties in bulk
-- each component should also have their own keep out zones. these would represent their mounts that hold them that shouldn't touch other components or other keep out zones.
-
-Questions i have are:
-- I ran the "python3 -m http.server 8080" command like you said. does this load my index.html file? . also you said "(some features may require a server for ES modules)" why is this and how would i know if some features are not working if i don't run a server. 
