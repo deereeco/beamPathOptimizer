@@ -17,6 +17,61 @@ export class BeamSegment {
         // Visual properties
         this.color = props.color || '#ff0000';
         this.branchIndex = props.branchIndex || 0; // for color coding split beams
+
+        // === NEW: Beam Physics Properties ===
+
+        // Direction vector (normalized) - calculated based on physics
+        this.direction = props.direction || null;  // { x, y }
+
+        // Direction angle in degrees (0-360)
+        this.directionAngle = props.directionAngle ?? null;
+
+        // Physics validation state
+        this.isValid = props.isValid ?? true;
+        this.validationError = props.validationError || null;
+
+        // Fixed length constraint (for lenses and beam splitter reflected outputs)
+        this.isFixedLength = props.isFixedLength || false;
+        this.fixedLength = props.fixedLength ?? null;  // mm
+    }
+
+    /**
+     * Update direction based on source and target positions
+     * @param {Object} sourcePos - Source position {x, y}
+     * @param {Object} targetPos - Target position {x, y}
+     */
+    updateDirection(sourcePos, targetPos) {
+        const dx = targetPos.x - sourcePos.x;
+        const dy = targetPos.y - sourcePos.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+
+        if (length > 0) {
+            this.direction = { x: dx / length, y: dy / length };
+            this.directionAngle = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+        } else {
+            this.direction = null;
+            this.directionAngle = null;
+        }
+    }
+
+    /**
+     * Set validation state
+     * @param {boolean} valid - Is the connection valid
+     * @param {string|null} error - Error message if invalid
+     */
+    setValidation(valid, error = null) {
+        this.isValid = valid;
+        this.validationError = error;
+    }
+
+    /**
+     * Set fixed length constraint
+     * @param {boolean} isFixed - Whether length is fixed
+     * @param {number|null} length - Fixed length in mm
+     */
+    setFixedLength(isFixed, length = null) {
+        this.isFixedLength = isFixed;
+        this.fixedLength = length;
     }
 
     toJSON() {
@@ -29,7 +84,14 @@ export class BeamSegment {
             wavelength: this.wavelength,
             power: this.power,
             pathLength: this.pathLength,
-            branchIndex: this.branchIndex
+            branchIndex: this.branchIndex,
+            // Beam physics properties
+            direction: this.direction ? { ...this.direction } : null,
+            directionAngle: this.directionAngle,
+            isValid: this.isValid,
+            validationError: this.validationError,
+            isFixedLength: this.isFixedLength,
+            fixedLength: this.fixedLength
         };
     }
 
@@ -286,7 +348,7 @@ export class BeamPath {
     }
 
     /**
-     * Validate the beam path graph
+     * Validate the beam path graph (structural validation)
      */
     validate() {
         const errors = [];
@@ -307,6 +369,96 @@ export class BeamPath {
             valid: errors.length === 0,
             errors
         };
+    }
+
+    /**
+     * Update directions for all segments based on component positions
+     * @param {Map|Array} components - Map or array of components
+     */
+    updateAllDirections(components) {
+        const componentMap = components instanceof Map
+            ? components
+            : new Map(components.map(c => [c.id, c]));
+
+        this.segments.forEach(segment => {
+            const source = componentMap.get(segment.sourceId);
+            const target = componentMap.get(segment.targetId);
+
+            if (source && target) {
+                segment.updateDirection(source.position, target.position);
+            }
+        });
+    }
+
+    /**
+     * Get all segments with their validation state
+     * @returns {Array} Segments with isValid status
+     */
+    getSegmentsWithValidation() {
+        return Array.from(this.segments.values()).map(segment => ({
+            ...segment,
+            isValid: segment.isValid,
+            validationError: segment.validationError
+        }));
+    }
+
+    /**
+     * Get count of valid/invalid segments
+     * @returns {Object} { valid: number, invalid: number, total: number }
+     */
+    getValidationSummary() {
+        let valid = 0;
+        let invalid = 0;
+
+        this.segments.forEach(segment => {
+            if (segment.isValid) {
+                valid++;
+            } else {
+                invalid++;
+            }
+        });
+
+        return { valid, invalid, total: this.segments.size };
+    }
+
+    /**
+     * Get all invalid segments
+     * @returns {Array} Array of invalid segments
+     */
+    getInvalidSegments() {
+        const invalid = [];
+        this.segments.forEach(segment => {
+            if (!segment.isValid) {
+                invalid.push(segment);
+            }
+        });
+        return invalid;
+    }
+
+    /**
+     * Get all segments with fixed length constraints
+     * @returns {Array} Array of segments with isFixedLength = true
+     */
+    getFixedLengthSegments() {
+        const fixed = [];
+        this.segments.forEach(segment => {
+            if (segment.isFixedLength) {
+                fixed.push(segment);
+            }
+        });
+        return fixed;
+    }
+
+    /**
+     * Apply fixed length constraints to segment path lengths
+     * Updates pathLength to match fixedLength where applicable
+     */
+    applyFixedLengthConstraints() {
+        this.segments.forEach(segment => {
+            if (segment.isFixedLength && segment.fixedLength !== null) {
+                segment.pathLength = segment.fixedLength;
+            }
+        });
     }
 
     /**

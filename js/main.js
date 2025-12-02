@@ -7,6 +7,7 @@ import { BeamSegment, BeamPath } from './models/BeamPath.js';
 import { Store, actions, createInitialState } from './state.js';
 import { Renderer } from './render/Renderer.js';
 import { Optimizer, OptimizerState } from './optimization/Optimizer.js';
+import * as BeamPhysics from './physics/BeamPhysics.js';
 
 /**
  * Main Application Class
@@ -153,15 +154,31 @@ class BeamPathOptimizerApp {
                 const selectedId = state.ui.selection.selectedIds[0];
                 if (!selectedId) return;
 
+                const component = state.components.get(selectedId);
+                if (!component) return;
+
                 let value = input.type === 'checkbox' ? input.checked :
                            input.type === 'range' ? parseFloat(input.value) :
                            input.type === 'number' ? parseFloat(input.value) : input.value;
+
+                // Apply angle constraints if updating angle and allowAnyAngle is false
+                if (propPath === 'angle' && !component.allowAnyAngle) {
+                    value = BeamPhysics.snapAngleToValid(
+                        value,
+                        component.type,
+                        component.isShallowAngle,
+                        component.shallowAngle
+                    );
+                    // Update the input to show the snapped value
+                    input.value = value;
+                    document.getElementById('prop-angle').value = value;
+                    document.getElementById('prop-angle-slider').value = value;
+                }
 
                 // Handle nested properties
                 const updates = {};
                 if (propPath.includes('.')) {
                     const [parent, child] = propPath.split('.');
-                    const component = state.components.get(selectedId);
                     updates[parent] = { ...component[parent], [child]: value };
                 } else {
                     updates[propPath] = value;
@@ -269,6 +286,182 @@ class BeamPathOptimizerApp {
             const offsetY = parseFloat(e.target.value) || 0;
             this.store.dispatch(actions.updateComponent(selectedId, {
                 mountZone: { offsetY }
+            }));
+        });
+
+        // === Beam Physics Controls ===
+        this.setupBeamPhysicsControls();
+    }
+
+    /**
+     * Set up beam physics property controls
+     */
+    setupBeamPhysicsControls() {
+        // Source emission direction
+        document.getElementById('prop-emission-angle')?.addEventListener('change', (e) => {
+            const state = this.store.getState();
+            const selectedId = state.ui.selection.selectedIds[0];
+            if (!selectedId) return;
+
+            const emissionAngle = parseInt(e.target.value) || 0;
+            this.store.dispatch(actions.updateComponent(selectedId, { emissionAngle }));
+        });
+
+        // Shallow angle mode toggle
+        const shallowEnabledCheckbox = document.getElementById('prop-shallow-enabled');
+        const shallowAngleControls = document.getElementById('shallow-angle-controls');
+
+        shallowEnabledCheckbox?.addEventListener('change', () => {
+            const state = this.store.getState();
+            const selectedId = state.ui.selection.selectedIds[0];
+            if (!selectedId) return;
+
+            const isShallowAngle = shallowEnabledCheckbox.checked;
+            this.store.dispatch(actions.updateComponent(selectedId, {
+                isShallowAngle,
+                snapToGrid: !isShallowAngle  // Auto-disable grid snap for shallow angle
+            }));
+
+            if (shallowAngleControls) {
+                shallowAngleControls.style.display = isShallowAngle ? 'block' : 'none';
+            }
+
+            // Update snap grid checkbox
+            document.getElementById('prop-snap-grid').checked = !isShallowAngle;
+        });
+
+        // Shallow angle value
+        document.getElementById('prop-shallow-angle')?.addEventListener('change', (e) => {
+            const state = this.store.getState();
+            const selectedId = state.ui.selection.selectedIds[0];
+            if (!selectedId) return;
+
+            const shallowAngle = parseFloat(e.target.value) || 5;
+            this.store.dispatch(actions.updateComponent(selectedId, { shallowAngle }));
+        });
+
+        // Grid snap toggle
+        document.getElementById('prop-snap-grid')?.addEventListener('change', (e) => {
+            const state = this.store.getState();
+            const selectedId = state.ui.selection.selectedIds[0];
+            if (!selectedId) return;
+
+            this.store.dispatch(actions.updateComponent(selectedId, {
+                snapToGrid: e.target.checked
+            }));
+        });
+
+        // Allow any angle toggle
+        document.getElementById('prop-allow-any-angle')?.addEventListener('change', (e) => {
+            const state = this.store.getState();
+            const selectedId = state.ui.selection.selectedIds[0];
+            if (!selectedId) return;
+
+            this.store.dispatch(actions.updateComponent(selectedId, {
+                allowAnyAngle: e.target.checked
+            }));
+        });
+
+        // Path constraint enabled toggle
+        const pathConstraintEnabled = document.getElementById('prop-path-constraint-enabled');
+        const pathConstraintDetails = document.getElementById('path-constraint-details');
+
+        pathConstraintEnabled?.addEventListener('change', () => {
+            const state = this.store.getState();
+            const selectedId = state.ui.selection.selectedIds[0];
+            if (!selectedId) return;
+
+            const enabled = pathConstraintEnabled.checked;
+            this.store.dispatch(actions.updateComponent(selectedId, {
+                pathConstraints: { enabled }
+            }));
+
+            if (pathConstraintDetails) {
+                pathConstraintDetails.style.display = enabled ? 'block' : 'none';
+            }
+        });
+
+        // Fix input distance checkbox
+        const fixInputDist = document.getElementById('prop-fix-input-dist');
+        const inputDistanceInput = document.getElementById('prop-input-distance');
+
+        fixInputDist?.addEventListener('change', () => {
+            inputDistanceInput.disabled = !fixInputDist.checked;
+            if (!fixInputDist.checked) {
+                const state = this.store.getState();
+                const selectedId = state.ui.selection.selectedIds[0];
+                if (selectedId) {
+                    this.store.dispatch(actions.updateComponent(selectedId, {
+                        pathConstraints: { inputDistance: null }
+                    }));
+                }
+            }
+        });
+
+        inputDistanceInput?.addEventListener('change', (e) => {
+            const state = this.store.getState();
+            const selectedId = state.ui.selection.selectedIds[0];
+            if (!selectedId) return;
+
+            const inputDistance = parseFloat(e.target.value) || null;
+            this.store.dispatch(actions.updateComponent(selectedId, {
+                pathConstraints: { inputDistance }
+            }));
+        });
+
+        // Fix output distance checkbox (for lenses)
+        const fixOutputDist = document.getElementById('prop-fix-output-dist');
+        const outputDistanceInput = document.getElementById('prop-output-distance');
+
+        fixOutputDist?.addEventListener('change', () => {
+            outputDistanceInput.disabled = !fixOutputDist.checked;
+            if (!fixOutputDist.checked) {
+                const state = this.store.getState();
+                const selectedId = state.ui.selection.selectedIds[0];
+                if (selectedId) {
+                    this.store.dispatch(actions.updateComponent(selectedId, {
+                        pathConstraints: { outputDistance: null }
+                    }));
+                }
+            }
+        });
+
+        outputDistanceInput?.addEventListener('change', (e) => {
+            const state = this.store.getState();
+            const selectedId = state.ui.selection.selectedIds[0];
+            if (!selectedId) return;
+
+            const outputDistance = parseFloat(e.target.value) || null;
+            this.store.dispatch(actions.updateComponent(selectedId, {
+                pathConstraints: { outputDistance }
+            }));
+        });
+
+        // Fix reflected distance checkbox (for beam splitters)
+        const fixReflectedDist = document.getElementById('prop-fix-reflected-dist');
+        const reflectedDistanceInput = document.getElementById('prop-reflected-distance');
+
+        fixReflectedDist?.addEventListener('change', () => {
+            reflectedDistanceInput.disabled = !fixReflectedDist.checked;
+            if (!fixReflectedDist.checked) {
+                const state = this.store.getState();
+                const selectedId = state.ui.selection.selectedIds[0];
+                if (selectedId) {
+                    this.store.dispatch(actions.updateComponent(selectedId, {
+                        pathConstraints: { reflectedDistance: null }
+                    }));
+                }
+            }
+        });
+
+        reflectedDistanceInput?.addEventListener('change', (e) => {
+            const state = this.store.getState();
+            const selectedId = state.ui.selection.selectedIds[0];
+            if (!selectedId) return;
+
+            const reflectedDistance = parseFloat(e.target.value) || null;
+            this.store.dispatch(actions.updateComponent(selectedId, {
+                pathConstraints: { reflectedDistance }
             }));
         });
     }
@@ -839,18 +1032,25 @@ class BeamPathOptimizerApp {
                     selectedIds.forEach(id => {
                         const comp = state.components.get(id);
                         if (comp && !comp.isFixed) {
-                            this.store.dispatch(actions.moveComponent(id, {
+                            let newPos = {
                                 x: comp.position.x + dx,
                                 y: comp.position.y + dy
-                            }));
+                            };
+                            // Apply grid snapping if enabled for this component
+                            if (comp.snapToGrid !== false) {
+                                newPos = BeamPhysics.snapToGrid(newPos, 25);
+                            }
+                            this.store.dispatch(actions.moveComponent(id, newPos));
                         }
                     });
                     this.dragStart = worldPos;
                 } else {
-                    this.store.dispatch(actions.moveComponent(this.dragComponent.id, {
-                        x: worldPos.x,
-                        y: worldPos.y
-                    }));
+                    // Apply grid snapping if enabled for this component
+                    let newPos = { x: worldPos.x, y: worldPos.y };
+                    if (this.dragComponent.snapToGrid !== false) {
+                        newPos = BeamPhysics.snapToGrid(newPos, 25);
+                    }
+                    this.store.dispatch(actions.moveComponent(this.dragComponent.id, newPos));
                 }
             }
         } else if (this.isDragging && this.dragZone) {
@@ -1128,6 +1328,7 @@ class BeamPathOptimizerApp {
 
     /**
      * Create beam connection between components
+     * Validates physics constraints before creating the connection
      */
     createBeamConnection(source, target) {
         const state = this.store.getState();
@@ -1145,15 +1346,111 @@ class BeamPathOptimizerApp {
             sourcePort = 'transmitted';
         }
 
+        // === Physics Validation ===
+
+        // Determine incoming beam angle for non-source components
+        let incomingBeamAngle = null;
+        if (source.type !== ComponentType.SOURCE) {
+            const incomingSegments = state.beamPath.getIncomingSegments(source.id);
+            if (incomingSegments.length > 0) {
+                // Get the incoming beam direction
+                const incomingSegment = incomingSegments[0];
+                const prevComponent = state.components.get(incomingSegment.sourceId);
+                if (prevComponent) {
+                    incomingBeamAngle = BeamPhysics.calculateBeamAngle(
+                        prevComponent.position,
+                        source.position
+                    );
+                }
+            }
+        }
+
+        // Build component map for validation
+        const componentMap = state.components;
+
+        // Validate the connection using physics
+        const validation = BeamPhysics.validateConnection(
+            source,
+            target,
+            sourcePort,
+            incomingBeamAngle,
+            componentMap
+        );
+
+        if (!validation.valid) {
+            // Show error message to user
+            this.showConnectionError(validation.error);
+            console.warn(`Connection blocked: ${validation.error}`);
+            return;
+        }
+
+        // Create the segment with physics data
         const segment = new BeamSegment({
             sourceId: source.id,
             targetId: target.id,
             sourcePort,
-            targetPort: 'input'
+            targetPort: 'input',
+            direction: validation.beamDirection,
+            directionAngle: validation.beamAngle,
+            isValid: true
         });
 
+        // Check if source component has fixed output distance constraint
+        if (source.pathConstraints?.enabled) {
+            const constraintDistance = sourcePort === 'reflected'
+                ? source.pathConstraints.reflectedDistance
+                : source.pathConstraints.outputDistance;
+
+            if (constraintDistance !== null) {
+                segment.setFixedLength(true, constraintDistance);
+            }
+        }
+
+        // Check if target component has fixed input distance constraint
+        if (target.pathConstraints?.enabled && target.pathConstraints.inputDistance !== null) {
+            segment.setFixedLength(true, target.pathConstraints.inputDistance);
+        }
+
         this.store.dispatch(actions.addBeamSegment(segment));
-        console.log(`Connected ${source.name} -> ${target.name}`);
+        console.log(`Connected ${source.name} -> ${target.name} (angle: ${validation.beamAngle?.toFixed(1)}°)`);
+    }
+
+    /**
+     * Show connection error message to user
+     */
+    showConnectionError(message) {
+        // Create toast notification
+        const toast = document.createElement('div');
+        toast.className = 'connection-error-toast';
+        toast.innerHTML = `
+            <span class="error-icon">⚠️</span>
+            <span class="error-message">Invalid connection: ${message}</span>
+        `;
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #dc2626;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideDown 0.3s ease-out;
+        `;
+
+        document.body.appendChild(toast);
+
+        // Remove after 4 seconds
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-out forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
     }
 
     /**
@@ -1482,6 +1779,79 @@ class BeamPathOptimizerApp {
             const mountDetailsControls = document.getElementById('mount-details-controls');
             if (mountDetailsControls) {
                 mountDetailsControls.style.display = mountEnabled ? 'flex' : 'none';
+            }
+
+            // === Beam Physics Controls ===
+
+            // Source emission direction (only for sources)
+            const sourceEmissionGroup = document.getElementById('source-emission-group');
+            if (component.type === ComponentType.SOURCE) {
+                sourceEmissionGroup.style.display = 'block';
+                document.getElementById('prop-emission-angle').value = component.emissionAngle || 0;
+            } else {
+                sourceEmissionGroup.style.display = 'none';
+            }
+
+            // Shallow angle mode (only for beam splitters)
+            const shallowAngleGroup = document.getElementById('shallow-angle-group');
+            if (component.type === ComponentType.BEAM_SPLITTER) {
+                shallowAngleGroup.style.display = 'block';
+                document.getElementById('prop-shallow-enabled').checked = component.isShallowAngle || false;
+                document.getElementById('prop-shallow-angle').value = component.shallowAngle || 5;
+                document.getElementById('shallow-angle-controls').style.display =
+                    component.isShallowAngle ? 'block' : 'none';
+            } else {
+                shallowAngleGroup.style.display = 'none';
+            }
+
+            // Grid snap toggle
+            document.getElementById('prop-snap-grid').checked = component.snapToGrid !== false;
+
+            // Allow any angle toggle
+            document.getElementById('prop-allow-any-angle').checked = component.allowAnyAngle || false;
+
+            // Path length constraints (for lenses and beam splitters)
+            const pathConstraintGroup = document.getElementById('path-constraint-group');
+            if (component.type === ComponentType.LENS || component.type === ComponentType.BEAM_SPLITTER) {
+                pathConstraintGroup.style.display = 'block';
+
+                const constraints = component.pathConstraints || {};
+                const isEnabled = constraints.enabled || false;
+
+                document.getElementById('prop-path-constraint-enabled').checked = isEnabled;
+                document.getElementById('path-constraint-details').style.display = isEnabled ? 'block' : 'none';
+
+                // Input distance
+                const hasInputDist = constraints.inputDistance !== null && constraints.inputDistance !== undefined;
+                document.getElementById('prop-fix-input-dist').checked = hasInputDist;
+                document.getElementById('prop-input-distance').value = constraints.inputDistance || '';
+                document.getElementById('prop-input-distance').disabled = !hasInputDist;
+
+                // Output distance (for lenses only)
+                const outputRow = document.getElementById('output-distance-row');
+                if (component.type === ComponentType.LENS) {
+                    outputRow.style.display = 'flex';
+                    const hasOutputDist = constraints.outputDistance !== null && constraints.outputDistance !== undefined;
+                    document.getElementById('prop-fix-output-dist').checked = hasOutputDist;
+                    document.getElementById('prop-output-distance').value = constraints.outputDistance || '';
+                    document.getElementById('prop-output-distance').disabled = !hasOutputDist;
+                } else {
+                    outputRow.style.display = 'none';
+                }
+
+                // Reflected distance (for beam splitters only)
+                const reflectedRow = document.getElementById('reflected-distance-row');
+                if (component.type === ComponentType.BEAM_SPLITTER) {
+                    reflectedRow.style.display = 'flex';
+                    const hasReflectedDist = constraints.reflectedDistance !== null && constraints.reflectedDistance !== undefined;
+                    document.getElementById('prop-fix-reflected-dist').checked = hasReflectedDist;
+                    document.getElementById('prop-reflected-distance').value = constraints.reflectedDistance || '';
+                    document.getElementById('prop-reflected-distance').disabled = !hasReflectedDist;
+                } else {
+                    reflectedRow.style.display = 'none';
+                }
+            } else {
+                pathConstraintGroup.style.display = 'none';
             }
         } else if (selectionType === 'zone' && selectedZoneId) {
             // Show zone properties

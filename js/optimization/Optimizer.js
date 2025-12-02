@@ -3,6 +3,7 @@
  */
 
 import { calculateTotalCost } from './CostFunction.js';
+import * as BeamPhysics from '../physics/BeamPhysics.js';
 
 /**
  * Default optimizer parameters
@@ -279,6 +280,14 @@ export class Optimizer {
         const workspace = this.appState.constraints.workspace;
         newPos = this.clampToWorkspace(component, newPos, workspace);
 
+        // Apply grid snapping if enabled for this component
+        if (component.snapToGrid !== false) {
+            newPos = BeamPhysics.snapToGrid(newPos, 25);  // 25mm grid
+        }
+
+        // Handle fixed path length constraints
+        newPos = this.constrainToFixedLengths(component, newPos);
+
         // Apply the move temporarily
         const oldPos = { ...component.position };
         component.position = newPos;
@@ -360,6 +369,54 @@ export class Optimizer {
             x: Math.max(minX, Math.min(maxX, pos.x)),
             y: Math.max(minY, Math.min(maxY, pos.y))
         };
+    }
+
+    /**
+     * Constrain position based on fixed path length constraints
+     * If an incoming or outgoing segment has a fixed length, constrain the position
+     */
+    constrainToFixedLengths(component, proposedPos) {
+        const beamPath = this.appState.beamPath;
+
+        // Get incoming segments with fixed length
+        const incomingSegments = beamPath.getIncomingSegments(component.id);
+        for (const segment of incomingSegments) {
+            if (segment.isFixedLength && segment.fixedLength !== null) {
+                const sourceComp = this.appState.components.get(segment.sourceId);
+                if (sourceComp) {
+                    // Constrain to circle at fixed distance from source
+                    const fixedDist = segment.fixedLength;
+                    const sourcePos = sourceComp.position;
+
+                    // Calculate direction from source to proposed position
+                    const dx = proposedPos.x - sourcePos.x;
+                    const dy = proposedPos.y - sourcePos.y;
+                    const currentDist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (currentDist > 0) {
+                        // Project to the fixed distance
+                        proposedPos = {
+                            x: sourcePos.x + (dx / currentDist) * fixedDist,
+                            y: sourcePos.y + (dy / currentDist) * fixedDist
+                        };
+                    }
+                }
+            }
+        }
+
+        // Get outgoing segments with fixed length
+        const outgoingSegments = beamPath.getOutgoingSegments(component.id);
+        for (const segment of outgoingSegments) {
+            if (segment.isFixedLength && segment.fixedLength !== null) {
+                const targetComp = this.appState.components.get(segment.targetId);
+                if (targetComp && !targetComp.isFixed) {
+                    // The target needs to move too, but we handle that through
+                    // the cost function penalty - it will naturally converge
+                }
+            }
+        }
+
+        return proposedPos;
     }
 
     /**

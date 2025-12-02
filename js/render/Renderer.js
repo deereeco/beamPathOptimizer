@@ -551,8 +551,16 @@ export class Renderer {
             // Line thickness based on power
             const thickness = Math.max(1, 3 * segment.power);
 
-            // Color based on branch
-            const color = segment.color || BRANCH_COLORS[segment.branchIndex % BRANCH_COLORS.length];
+            // Color based on validity and branch
+            let color = segment.color || BRANCH_COLORS[segment.branchIndex % BRANCH_COLORS.length];
+
+            // Invalid segment styling
+            if (segment.isValid === false) {
+                color = '#ff4444';  // Red for invalid
+                ctx.setLineDash([5, 5]);  // Dashed line
+            } else {
+                ctx.setLineDash([]);  // Solid line
+            }
 
             ctx.strokeStyle = color;
             ctx.lineWidth = thickness;
@@ -564,6 +572,9 @@ export class Renderer {
             ctx.lineTo(endScreen.x, endScreen.y);
             ctx.stroke();
 
+            // Reset line dash
+            ctx.setLineDash([]);
+
             // Draw arrow in the middle
             this.drawArrow(ctx, startScreen, endScreen, color);
 
@@ -571,12 +582,68 @@ export class Renderer {
             if (segment.pathLength > 0) {
                 const midX = (startScreen.x + endScreen.x) / 2;
                 const midY = (startScreen.y + endScreen.y) / 2;
-                ctx.fillStyle = '#ffffff88';
-                ctx.font = '9px sans-serif';
+
+                // Fixed length indicator
+                if (segment.isFixedLength) {
+                    ctx.fillStyle = '#f59e0b';  // Amber for fixed length
+                    ctx.font = 'bold 9px sans-serif';
+                    ctx.fillText(`🔒 ${segment.pathLength.toFixed(1)}mm`, midX, midY - 8);
+                } else {
+                    ctx.fillStyle = '#ffffff88';
+                    ctx.font = '9px sans-serif';
+                    ctx.fillText(`${segment.pathLength.toFixed(1)}mm`, midX, midY - 8);
+                }
                 ctx.textAlign = 'center';
-                ctx.fillText(`${segment.pathLength.toFixed(1)}mm`, midX, midY - 8);
             }
         });
+
+        // Draw source emission direction indicators
+        components.forEach(component => {
+            if (component.type === 'source') {
+                this.drawSourceEmissionIndicator(component, viewport);
+            }
+        });
+    }
+
+    /**
+     * Draw source emission direction indicator
+     */
+    drawSourceEmissionIndicator(source, viewport) {
+        const ctx = this.ctx;
+        const screen = this.worldToScreen(source.position.x, source.position.y, viewport);
+
+        // Get emission direction
+        const emissionAngle = (source.emissionAngle || 0) * Math.PI / 180;
+        const indicatorLength = 25;
+
+        const endX = screen.x + Math.cos(emissionAngle) * indicatorLength;
+        const endY = screen.y + Math.sin(emissionAngle) * indicatorLength;
+
+        // Draw direction line
+        ctx.strokeStyle = '#ffcc00';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(screen.x, screen.y);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Draw arrowhead
+        const arrowSize = 6;
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath();
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(
+            endX - arrowSize * Math.cos(emissionAngle - 0.5),
+            endY - arrowSize * Math.sin(emissionAngle - 0.5)
+        );
+        ctx.lineTo(
+            endX - arrowSize * Math.cos(emissionAngle + 0.5),
+            endY - arrowSize * Math.sin(emissionAngle + 0.5)
+        );
+        ctx.closePath();
+        ctx.fill();
     }
 
     /**

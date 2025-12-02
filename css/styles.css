@@ -724,3 +724,126 @@ input[type="checkbox"] {
     opacity: 0.8;
     transform: translate(-50%, -50%);
 }
+
+/* ===== Toast Notifications ===== */
+@keyframes slideDown {
+    from {
+        transform: translateX(-50%) translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+.connection-error-toast {
+    font-family: var(--font-sans);
+}
+
+.connection-error-toast .error-icon {
+    font-size: 16px;
+}
+
+.connection-error-toast .error-message {
+    font-size: 14px;
+}
+
+/* ===== Beam Physics Property Controls ===== */
+.property-select {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.property-select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.shallow-toggle,
+.path-constraint-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+}
+
+.shallow-angle-controls,
+.path-constraint-details {
+    margin-top: 8px;
+    padding: 8px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.path-constraint-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.path-constraint-row:last-child {
+    margin-bottom: 0;
+}
+
+.path-constraint-row label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+}
+
+.path-constraint-row input[type="number"] {
+    width: 60px;
+}
+
+.path-constraint-row input[type="number"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Constraint Override Checkboxes */
+.constraint-checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.constraint-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.constraint-checkbox input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+}
+
+.constraint-checkbox span {
+    color: var(--text-secondary);
+}
+
+.constraint-checkbox:hover span {
+    color: var(--text-primary);
+}

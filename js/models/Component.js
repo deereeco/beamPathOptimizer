@@ -12,6 +12,24 @@ export const ComponentType = {
 };
 
 /**
+ * Valid angles per component type for beam physics
+ * - Mirrors: 45 or 135 degrees (reflects beam by 90 degrees)
+ * - Beam Splitters: 45 or 135 by default, or custom shallow angle
+ * - Transmission components (lens, waveplate, filter): 0, 90, 180, 270
+ * - Sources: 0, 90, 180, 270 (emits in cardinal direction)
+ * - Detectors: Any (accepts beam from any direction)
+ */
+export const VALID_ANGLES = {
+    [ComponentType.SOURCE]: [0, 90, 180, 270],
+    [ComponentType.MIRROR]: [45, 135],
+    [ComponentType.BEAM_SPLITTER]: [45, 135],
+    [ComponentType.LENS]: [0, 90, 180, 270],
+    [ComponentType.WAVEPLATE]: [0, 90, 180, 270],
+    [ComponentType.FILTER]: [0, 90, 180, 270],
+    [ComponentType.DETECTOR]: [0, 45, 90, 135, 180, 225, 270, 315]
+};
+
+/**
  * Default properties for each component type
  * Mount zone properties:
  *   - enabled: whether the mount zone is active
@@ -141,6 +159,31 @@ export class Component {
         this.mountZone = props.mountZone
             ? { ...defaultMountZone, ...props.mountZone }
             : { ...defaultMountZone };
+
+        // === NEW: Beam Physics Properties ===
+
+        // Emission angle for sources (cardinal directions: 0, 90, 180, 270)
+        this.emissionAngle = props.emissionAngle ?? 0;
+
+        // Shallow angle mode for beam splitters
+        this.isShallowAngle = props.isShallowAngle || false;
+        this.shallowAngle = props.shallowAngle ?? 5;  // degrees (typically 5-10)
+
+        // Per-component grid snap toggle (default true, false for shallow angle beam splitters)
+        this.snapToGrid = props.snapToGrid ?? true;
+
+        // Allow any angle override (bypasses angle constraints for this component)
+        this.allowAnyAngle = props.allowAnyAngle ?? false;
+
+        // Fixed path length constraints (for lenses and beam splitter reflected outputs)
+        this.pathConstraints = props.pathConstraints
+            ? { ...props.pathConstraints }
+            : {
+                enabled: false,
+                inputDistance: null,     // Fixed distance from previous component (mm)
+                outputDistance: null,    // Fixed distance to next component (mm)
+                reflectedDistance: null  // For beam splitters: fixed distance for reflected beam (mm)
+            };
 
         // Metadata
         this.notes = props.notes || '';
@@ -332,27 +375,142 @@ export class Component {
     }
 
     /**
-     * Get output direction vector based on angle and port
+     * Get valid angles for this component type
      */
-    getOutputDirection(port = 'reflected') {
-        const rad = (this.angle * Math.PI) / 180;
+    getValidAngles() {
+        // If allowAnyAngle is enabled, return all common angles
+        if (this.allowAnyAngle) {
+            return [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165,
+                    180, 195, 210, 225, 240, 255, 270, 285, 300, 315, 330, 345];
+        }
 
+        if (this.type === ComponentType.BEAM_SPLITTER && this.isShallowAngle) {
+            // Shallow angle beam splitter can have custom angles
+            const a = this.shallowAngle;
+            return [a, 180 - a, 180 + a, 360 - a];
+        }
+        return VALID_ANGLES[this.type] || [0, 90, 180, 270];
+    }
+
+    /**
+     * Get surface normal for reflective components (mirrors, beam splitters)
+     * @returns {Object|null} Normal vector {x, y} or null if not reflective
+     */
+    getSurfaceNormal() {
+        if (this.type !== ComponentType.MIRROR && this.type !== ComponentType.BEAM_SPLITTER) {
+            return null;
+        }
+
+        // Surface runs along the component angle
+        // Normal is perpendicular (90 degrees rotated)
+        const angle = this.isShallowAngle ? this.shallowAngle : this.angle;
+        const normalAngle = (angle + 90) * Math.PI / 180;
+        return {
+            x: Math.cos(normalAngle),
+            y: Math.sin(normalAngle)
+        };
+    }
+
+    /**
+     * Get output direction vector based on angle and port
+     * @param {string} port - 'output', 'reflected', or 'transmitted'
+     * @param {Object|null} inputDirection - Input beam direction for calculating reflections
+     */
+    getOutputDirection(port = 'reflected', inputDirection = null) {
         if (this.type === ComponentType.SOURCE) {
-            // Source outputs along its angle direction
+            // Source outputs along its emission angle
+            const rad = (this.emissionAngle * Math.PI) / 180;
             return { x: Math.cos(rad), y: Math.sin(rad) };
+        }
+
+        if (this.type === ComponentType.DETECTOR) {
+            // Detectors don't output
+            return null;
         }
 
         if (port === 'transmitted') {
             // Transmitted beam continues in input direction
-            return null; // Will be calculated based on input beam
+            return inputDirection ? { ...inputDirection } : null;
         }
 
-        // Reflected beam: perpendicular to mirror surface
-        // Mirror surface is along the angle, reflected is perpendicular
+        // Reflected beam - calculate using reflection formula
+        if (inputDirection && (this.type === ComponentType.MIRROR || this.type === ComponentType.BEAM_SPLITTER)) {
+            const normal = this.getSurfaceNormal();
+            if (normal) {
+                // R = D - 2(D·N)N
+                const dot = inputDirection.x * normal.x + inputDirection.y * normal.y;
+                return {
+                    x: inputDirection.x - 2 * dot * normal.x,
+                    y: inputDirection.y - 2 * dot * normal.y
+                };
+            }
+        }
+
+        // Fallback: perpendicular to mirror surface (legacy behavior)
+        const rad = (this.angle * Math.PI) / 180;
         return {
             x: Math.cos(rad + Math.PI / 2),
             y: Math.sin(rad + Math.PI / 2)
         };
+    }
+
+    /**
+     * Check if this component can accept a beam from a given direction
+     * @param {Object} direction - Incoming beam direction vector {x, y}
+     * @returns {boolean}
+     */
+    canAcceptBeamFrom(direction) {
+        if (this.type === ComponentType.DETECTOR) {
+            return true;  // Detectors accept from any angle
+        }
+
+        if (this.type === ComponentType.SOURCE) {
+            return false;  // Sources don't accept input
+        }
+
+        // For transmission components, beam must be roughly perpendicular to surface
+        if ([ComponentType.LENS, ComponentType.WAVEPLATE, ComponentType.FILTER].includes(this.type)) {
+            // Component surface is along the component angle
+            // Beam should be perpendicular to surface (parallel to normal)
+            const normalAngle = (this.angle + 90) * Math.PI / 180;
+            const normal = { x: Math.cos(normalAngle), y: Math.sin(normalAngle) };
+
+            // Calculate angle between beam and normal
+            const dot = Math.abs(direction.x * normal.x + direction.y * normal.y);
+            // dot should be close to 1 (parallel) or -1 (anti-parallel)
+            const tolerance = Math.cos(5 * Math.PI / 180);  // 5 degree tolerance
+            return dot >= tolerance;
+        }
+
+        // Mirrors and beam splitters accept from any direction (they reflect)
+        return true;
+    }
+
+    /**
+     * Snap component angle to nearest valid angle
+     */
+    snapAngleToValid() {
+        const validAngles = this.getValidAngles();
+        let normalizedAngle = this.angle % 360;
+        if (normalizedAngle < 0) normalizedAngle += 360;
+
+        let closest = validAngles[0];
+        let minDiff = Math.abs(normalizedAngle - validAngles[0]);
+
+        for (const validAngle of validAngles) {
+            const diff = Math.min(
+                Math.abs(normalizedAngle - validAngle),
+                Math.abs(normalizedAngle - validAngle + 360),
+                Math.abs(normalizedAngle - validAngle - 360)
+            );
+            if (diff < minDiff) {
+                minDiff = diff;
+                closest = validAngle;
+            }
+        }
+
+        this.angle = closest;
+        return closest;
     }
 
     /**
@@ -372,11 +530,13 @@ export class Component {
      */
     update(props) {
         const updatableProps = ['name', 'position', 'angle', 'size', 'mass',
-                                'reflectance', 'transmittance', 'isFixed', 'notes', 'mountZone'];
+                                'reflectance', 'transmittance', 'isFixed', 'notes', 'mountZone',
+                                'emissionAngle', 'isShallowAngle', 'shallowAngle', 'snapToGrid',
+                                'allowAnyAngle', 'pathConstraints'];
 
         for (const key of updatableProps) {
             if (props[key] !== undefined) {
-                if (typeof props[key] === 'object') {
+                if (typeof props[key] === 'object' && props[key] !== null) {
                     this[key] = { ...this[key], ...props[key] };
                 } else {
                     this[key] = props[key];
@@ -390,6 +550,11 @@ export class Component {
         }
         if (props.transmittance !== undefined) {
             this.reflectance = Math.min(this.reflectance, 1 - this.transmittance);
+        }
+
+        // Auto-disable grid snap for shallow angle beam splitters
+        if (props.isShallowAngle !== undefined && props.isShallowAngle) {
+            this.snapToGrid = false;
         }
 
         this.modifiedAt = new Date().toISOString();
@@ -412,6 +577,13 @@ export class Component {
             transmittance: this.transmittance,
             isFixed: this.isFixed,
             mountZone: { ...this.mountZone },
+            // Beam physics properties
+            emissionAngle: this.emissionAngle,
+            isShallowAngle: this.isShallowAngle,
+            shallowAngle: this.shallowAngle,
+            snapToGrid: this.snapToGrid,
+            allowAnyAngle: this.allowAnyAngle,
+            pathConstraints: { ...this.pathConstraints },
             notes: this.notes,
             createdAt: this.createdAt,
             modifiedAt: this.modifiedAt

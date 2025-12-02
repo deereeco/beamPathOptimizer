@@ -3,6 +3,8 @@
  * Calculates the total cost of a component configuration
  */
 
+import * as BeamPhysics from '../physics/BeamPhysics.js';
+
 /**
  * Calculate the cost of center of mass position
  * Returns 0 if CoM is inside mounting zone, otherwise squared distance to zone center
@@ -209,6 +211,108 @@ export function calculatePenalty(components, constraints) {
 }
 
 /**
+ * Calculate beam angle violation penalty
+ * Penalizes segments where beam direction doesn't match physics expectations
+ */
+export function calculateBeamAnglePenalty(beamPath, components) {
+    let penalty = 0;
+    const ANGLE_PENALTY_MULTIPLIER = 500;  // Per degree of deviation
+
+    const componentMap = new Map();
+    components.forEach(c => componentMap.set(c.id, c));
+
+    const segments = beamPath.getAllSegments();
+
+    // Build incoming angle map
+    const incomingAngles = new Map();
+
+    // First, find all source components and set their emission angles
+    for (const comp of components) {
+        if (comp.type === 'source') {
+            incomingAngles.set(comp.id, comp.emissionAngle || 0);
+        }
+    }
+
+    // Process segments to propagate angles
+    for (const segment of segments) {
+        const source = componentMap.get(segment.sourceId);
+        const target = componentMap.get(segment.targetId);
+
+        if (!source || !target) continue;
+
+        // Get incoming angle to source
+        let incomingAngle = incomingAngles.get(source.id);
+
+        // If source is a source component, use emission angle
+        if (source.type === 'source') {
+            incomingAngle = source.emissionAngle || 0;
+        }
+
+        // If we don't have an incoming angle, we can't validate
+        if (incomingAngle === undefined || incomingAngle === null) continue;
+
+        // Calculate expected output angle
+        const expectedAngle = BeamPhysics.getOutputDirection(source, incomingAngle, segment.sourcePort);
+        if (expectedAngle === null) continue;
+
+        // Calculate actual beam angle
+        const actualAngle = BeamPhysics.calculateBeamAngle(source.position, target.position);
+        if (actualAngle === null) continue;
+
+        // Calculate deviation
+        const deviation = BeamPhysics.calculateSegmentAngleDeviation(segment, componentMap, incomingAngle);
+
+        // Add penalty proportional to deviation
+        if (deviation > BeamPhysics.ANGLE_TOLERANCE) {
+            penalty += ANGLE_PENALTY_MULTIPLIER * (deviation / 90);  // Normalize by max deviation
+        }
+
+        // Store the actual angle for the target (for downstream calculation)
+        incomingAngles.set(target.id, actualAngle);
+    }
+
+    return penalty;
+}
+
+/**
+ * Calculate fixed path length violation penalty
+ * Heavily penalizes segments with fixed length that don't match the constraint
+ */
+export function calculateFixedLengthPenalty(beamPath, components) {
+    let penalty = 0;
+    const FIXED_LENGTH_PENALTY_MULTIPLIER = 2000;
+
+    const componentMap = new Map();
+    components.forEach(c => componentMap.set(c.id, c));
+
+    const segments = beamPath.getAllSegments();
+
+    for (const segment of segments) {
+        if (!segment.isFixedLength || segment.fixedLength === null) continue;
+
+        const source = componentMap.get(segment.sourceId);
+        const target = componentMap.get(segment.targetId);
+
+        if (!source || !target) continue;
+
+        // Calculate actual distance
+        const dx = target.position.x - source.position.x;
+        const dy = target.position.y - source.position.y;
+        const actualLength = Math.sqrt(dx * dx + dy * dy);
+
+        // Calculate deviation from fixed length
+        const deviation = Math.abs(actualLength - segment.fixedLength);
+
+        // Add heavy penalty for any deviation
+        if (deviation > 0.1) {  // 0.1mm tolerance
+            penalty += FIXED_LENGTH_PENALTY_MULTIPLIER * (deviation / segment.fixedLength);
+        }
+    }
+
+    return penalty;
+}
+
+/**
  * Calculate total cost with weights
  */
 export function calculateTotalCost(state, weights) {
@@ -216,7 +320,7 @@ export function calculateTotalCost(state, weights) {
     const movableComponents = components.filter(c => !c.isFixed);
 
     if (movableComponents.length === 0) {
-        return { total: 0, com: 0, footprint: 0, pathLength: 0, penalty: 0 };
+        return { total: 0, com: 0, footprint: 0, pathLength: 0, penalty: 0, beamAngle: 0, fixedLength: 0 };
     }
 
     // Calculate center of mass
@@ -240,12 +344,18 @@ export function calculateTotalCost(state, weights) {
     const pathLengthCost = calculatePathLengthCost(state.beamPath, components);
     const penalty = calculatePenalty(components, state.constraints);
 
-    // Weighted total
+    // Beam physics penalties
+    const beamAnglePenalty = calculateBeamAnglePenalty(state.beamPath, components);
+    const fixedLengthPenalty = calculateFixedLengthPenalty(state.beamPath, components);
+
+    // Weighted total (beam physics penalties are added as hard constraints)
     const total = (
         weights.com * comCost +
         weights.footprint * footprintCost +
         weights.pathLength * pathLengthCost +
-        penalty
+        penalty +
+        beamAnglePenalty +
+        fixedLengthPenalty
     );
 
     return {
@@ -253,7 +363,9 @@ export function calculateTotalCost(state, weights) {
         com: comCost,
         footprint: footprintCost,
         pathLength: pathLengthCost,
-        penalty
+        penalty,
+        beamAngle: beamAnglePenalty,
+        fixedLength: fixedLengthPenalty
     };
 }
 
@@ -262,5 +374,7 @@ export default {
     calculateFootprintCost,
     calculatePathLengthCost,
     calculatePenalty,
+    calculateBeamAnglePenalty,
+    calculateFixedLengthPenalty,
     calculateTotalCost
 };

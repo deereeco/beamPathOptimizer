@@ -185,6 +185,83 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- === Beam Physics Properties === -->
+
+                        <!-- Source Emission Direction (only for sources) -->
+                        <div class="property-group" id="source-emission-group" style="display:none;">
+                            <label class="property-label">Emission Direction</label>
+                            <select id="prop-emission-angle" class="property-select">
+                                <option value="0">Right (0°)</option>
+                                <option value="90">Down (90°)</option>
+                                <option value="180">Left (180°)</option>
+                                <option value="270">Up (270°)</option>
+                            </select>
+                        </div>
+
+                        <!-- Shallow Angle Mode (only for beam splitters) -->
+                        <div class="property-group" id="shallow-angle-group" style="display:none;">
+                            <label class="property-label">Shallow Angle Mode</label>
+                            <label class="shallow-toggle">
+                                <input type="checkbox" id="prop-shallow-enabled">
+                                <span>Enable shallow reflection</span>
+                            </label>
+                            <div class="shallow-angle-controls" id="shallow-angle-controls" style="display:none;">
+                                <label>Reflection Angle:
+                                    <input type="number" id="prop-shallow-angle" class="property-input small" min="1" max="30" value="5"> deg
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Constraint Overrides (shown for all components) -->
+                        <div class="property-group constraint-overrides">
+                            <label class="property-label">Constraint Overrides</label>
+                            <div class="constraint-checkbox-group">
+                                <label class="constraint-checkbox">
+                                    <input type="checkbox" id="prop-snap-grid" checked>
+                                    <span>Snap to grid</span>
+                                </label>
+                                <label class="constraint-checkbox">
+                                    <input type="checkbox" id="prop-allow-any-angle">
+                                    <span>Allow any angle</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Path Length Constraints (for lenses and beam splitters) -->
+                        <div class="property-group" id="path-constraint-group" style="display:none;">
+                            <label class="property-label">Path Constraints</label>
+                            <div class="path-constraint-controls">
+                                <label class="path-constraint-toggle">
+                                    <input type="checkbox" id="prop-path-constraint-enabled">
+                                    <span>Enable fixed distances</span>
+                                </label>
+                                <div class="path-constraint-details" id="path-constraint-details" style="display:none;">
+                                    <div class="path-constraint-row" id="input-distance-row">
+                                        <label>
+                                            <input type="checkbox" id="prop-fix-input-dist">
+                                            Input distance:
+                                        </label>
+                                        <input type="number" id="prop-input-distance" class="property-input small" min="1" placeholder="mm" disabled> mm
+                                    </div>
+                                    <div class="path-constraint-row" id="output-distance-row">
+                                        <label>
+                                            <input type="checkbox" id="prop-fix-output-dist">
+                                            Output distance:
+                                        </label>
+                                        <input type="number" id="prop-output-distance" class="property-input small" min="1" placeholder="mm" disabled> mm
+                                    </div>
+                                    <div class="path-constraint-row" id="reflected-distance-row" style="display:none;">
+                                        <label>
+                                            <input type="checkbox" id="prop-fix-reflected-dist">
+                                            Reflected distance:
+                                        </label>
+                                        <input type="number" id="prop-reflected-distance" class="property-input small" min="1" placeholder="mm" disabled> mm
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="property-actions">
                             <button id="btn-duplicate" class="action-btn">Duplicate</button>
                             <button id="btn-delete" class="action-btn danger">Delete</button>
