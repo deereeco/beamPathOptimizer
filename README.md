@@ -2,6 +2,8 @@
 
 A web-based tool for designing and optimizing optical beam paths on a breadboard. Place optical components, connect them with laser beams, and use simulated annealing optimization to find optimal component placements.
 
+**Current Version: 1.2**
+
 ## Features
 
 ### Component Types
@@ -20,9 +22,19 @@ Realistic optical constraints are enforced:
 - **Beam splitters** support standard angles or shallow angles for specific applications
 - **Invalid connections are blocked** with clear error messages
 
+### Multiple Wavelengths / Beam Colors
+- Select wavelength before adding beams (Beams section in left panel)
+- **6 preset wavelengths**: 633nm HeNe (red), 532nm Nd:YAG (green), 1064nm IR, 405nm Violet, 780nm GaAs, 850nm VCSEL
+- Add custom wavelengths via the gear button
+- Beam segments can display multiple colors for co-aligned beams
+
+### Workspace Settings
+- **Background**: Choose solid color or image file via Settings (gear icon in toolbar)
+- **Grid**: Toggle grid snapping on/off globally, adjust grid size (1-50mm) in the Grid section
+
 ### Constraint Overrides
 Each component has checkboxes to relax constraints when needed:
-- **Snap to grid** - When checked, component positions snap to 25mm grid (default: ON)
+- **Snap to grid** - When checked, component positions snap to grid (default: ON)
 - **Allow any angle** - When checked, component can use any 15° increment (default: OFF)
 
 ### Path Length Constraints
@@ -57,9 +69,12 @@ After optimization completes, click "View Results" to explore the optimization h
 - **Mounting Zone** - Target area for center of mass (green)
 - **Keep-out Zones** - Areas where components cannot be placed (red)
 
-### Other Features
-- Pan and zoom navigation
-- Multi-select components (Shift+click or drag box)
+### UI Features
+- **Drag-and-drop** components from palette to canvas
+- **Pan and zoom** navigation (scroll wheel, shift+drag)
+- **Multi-select** components (Ctrl+click or drag box)
+- **Resizable right panel** - drag divider to adjust width
+- **Adjustable text size** - slider at top of properties panel (80-150%)
 - Undo/Redo (Ctrl+Z / Ctrl+Shift+Z)
 - Save/Load projects as JSON
 - Real-time center of mass display
@@ -68,15 +83,15 @@ After optimization completes, click "View Results" to explore the optimization h
 ## Usage
 
 ### Getting Started
-1. Open `index.html` in a web browser
-2. Select a component type from the toolbar
-3. Click on the canvas to place the component
-4. Use the Properties panel to adjust component settings
+1. Open `index.html` in a web browser (serve via HTTP server for ES modules)
+2. Drag a component from the left panel onto the canvas
+3. Components snap to grid automatically (grid size adjustable in Grid section)
+4. Use the Properties panel on the right to adjust component settings
 
 ### Creating Beam Connections
-1. Click the "Connect" tool in the toolbar
-2. Click on a source component
-3. Click on a target component
+1. Select a wavelength in the Beams section (left panel)
+2. Click the "Add Beams" tool
+3. Click on a source component, then click on a target component
 4. If the connection is physically valid, a beam segment is created
 
 ### Running the Optimizer
@@ -99,12 +114,18 @@ After optimization completes, click "View Results" to explore the optimization h
 7. Press Escape or "Close Results View" to exit
 
 ### Keyboard Shortcuts
-- `Delete` / `Backspace` - Delete selected component
+- `V` - Select tool
+- `H` - Pan tool
+- `C` - Add Beams (connect) tool
+- `M` - Place mirror
+- `S` - Place source
+- `R` - Rotate selected component(s) 90° clockwise
+- `Delete` / `Backspace` - Delete selected
 - `Ctrl+Z` - Undo
-- `Ctrl+Shift+Z` - Redo
+- `Ctrl+Y` / `Ctrl+Shift+Z` - Redo
 - `Ctrl+S` - Save project
-- `Ctrl+O` - Open project
-- `Escape` - Cancel current operation / Clear selection
+- `+` / `-` - Zoom in/out
+- `Escape` - Cancel operation / Clear selection / Exit preview mode
 
 ## File Structure
 
@@ -138,7 +159,7 @@ beamPathOptimizer/
 - X increases to the right
 - Y increases downward
 - Default workspace: 600mm x 600mm
-- Grid size: 25mm
+- Default grid size: 25mm (configurable 1-50mm)
 
 ### Angle Convention
 - 0° points right (+X direction)
@@ -156,6 +177,10 @@ Tested on modern browsers with ES6 module support:
 - Firefox 75+
 - Safari 13+
 - Edge 80+
+
+## Version History
+
+See `versionlog.txt` for detailed changelog of all versions.
 
 ## License
 MIT License

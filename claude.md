@@ -155,6 +155,7 @@ A 2D GUI application for optimizing laser beam path component placement on an op
 | V | Select tool |
 | H | Pan tool |
 | C | Connect beam tool |
+| R | Rotate selected components 90° clockwise |
 | M | Place mirror |
 | S | Place source (Ctrl+S = save) |
 | Delete/Backspace | Delete selected |
@@ -532,3 +533,37 @@ For each component in beam path:
 | Component placement | ✅ Auto-snaps to grid |
 | Version bump to 1.1 | ✅ Complete |
 | Version log created | ✅ versionlog.txt |
+
+---
+
+## Phase 7: V1.2 Feature Update - COMPLETED
+
+### Feature Implementation Progress
+
+| # | Feature | Status | Notes |
+|---|---------|--------|-------|
+| 1 | **R Key Rotation Shortcut** | ✅ Done | Press R to rotate selected component 90° |
+| 2 | **Right Pane Centering** | ✅ Done | Center-align all items in properties panel |
+| 3 | **Rename Tools → Navigation** | ✅ Done | Simple HTML text change |
+| 4 | **Global Grid Settings** | ✅ Done | Toggle + slider (1-50mm) |
+| 5 | **Draggable Right Panel Divider** | ✅ Done | Resize panel width (180-400px) |
+| 6 | **Right Panel Text Size Slider** | ✅ Done | 80%-150% range, persists to localStorage |
+| 7 | **Workspace Background** | ✅ Done | Solid color or image file, path saved in JSON |
+| 8 | **Multiple Wavelengths** | ✅ Done | 6 presets + custom, multi-color segments |
+
+### Detailed Plan
+See: `Plans/V1.2-Features-Plan.md`
+
+### Files Modified
+| File | Changes |
+|------|---------|
+| `index.html` | Left panel restructure (Navigation, Beams, Components, Zones, Grid), Settings modal, wavelength controls |
+| `css/styles.css` | Right pane centering, panel resize handle, wavelength UI, settings modal, grid controls |
+| `js/state.js` | Grid state, wavelength state (6 presets), background state, new action types, version bump to 1.2 |
+| `js/main.js` | R key handler, grid controls, panel resize, text size slider, settings modal, wavelength selector |
+| `js/models/BeamPath.js` | `wavelengthIds` array support on BeamSegment |
+| `js/render/Renderer.js` | Multi-color segment rendering, background color/image rendering |
+
+### All Phase 7 Features Complete ✅
+
+Version 1.2 released - see `versionlog.txt` for full changelog.

@@ -17,6 +17,7 @@ export class BeamSegment {
         // Visual properties
         this.color = props.color || '#ff0000';
         this.branchIndex = props.branchIndex || 0; // for color coding split beams
+        this.wavelengthIds = props.wavelengthIds || []; // Array of wavelength IDs for multi-color display
 
         // === NEW: Beam Physics Properties ===
 
@@ -85,6 +86,7 @@ export class BeamSegment {
             power: this.power,
             pathLength: this.pathLength,
             branchIndex: this.branchIndex,
+            wavelengthIds: this.wavelengthIds,
             // Beam physics properties
             direction: this.direction ? { ...this.direction } : null,
             directionAngle: this.directionAngle,

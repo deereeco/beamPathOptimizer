@@ -140,6 +140,21 @@ class BeamPathOptimizerApp {
         document.getElementById('zoom-out')?.addEventListener('click', () => this.zoom(0.8));
         document.getElementById('zoom-fit')?.addEventListener('click', () => this.zoomFit());
 
+        // Grid controls
+        this.setupGridControls();
+
+        // Panel resize handle
+        this.setupPanelResize();
+
+        // Panel text size control
+        this.setupPanelTextSize();
+
+        // Settings modal
+        this.setupSettingsModal();
+
+        // Wavelength controls
+        this.setupWavelengthControls();
+
         // Property panel inputs
         this.setupPropertyInputs();
 
@@ -489,6 +504,310 @@ class BeamPathOptimizerApp {
             this.store.dispatch(actions.updateComponent(selectedId, {
                 pathConstraints: { reflectedDistance }
             }));
+        });
+    }
+
+    /**
+     * Set up grid controls
+     */
+    setupGridControls() {
+        const gridEnabledCheckbox = document.getElementById('grid-enabled');
+        const gridSizeSlider = document.getElementById('grid-size-slider');
+        const gridSizeInput = document.getElementById('grid-size-input');
+        const gridSizeValue = document.getElementById('grid-size-value');
+
+        // Grid enabled toggle
+        gridEnabledCheckbox?.addEventListener('change', (e) => {
+            this.store.dispatch(actions.setGridSettings({ enabled: e.target.checked }));
+        });
+
+        // Grid size slider
+        gridSizeSlider?.addEventListener('input', (e) => {
+            const size = parseInt(e.target.value, 10);
+            if (gridSizeInput) gridSizeInput.value = size;
+            if (gridSizeValue) gridSizeValue.textContent = size;
+            this.store.dispatch(actions.setGridSettings({ size }));
+        });
+
+        // Grid size input
+        gridSizeInput?.addEventListener('change', (e) => {
+            let size = parseInt(e.target.value, 10);
+            size = Math.max(1, Math.min(50, size)); // Clamp to 1-50
+            e.target.value = size;
+            if (gridSizeSlider) gridSizeSlider.value = size;
+            if (gridSizeValue) gridSizeValue.textContent = size;
+            this.store.dispatch(actions.setGridSettings({ size }));
+        });
+    }
+
+    /**
+     * Set up panel resize handle
+     */
+    setupPanelResize() {
+        const handle = document.getElementById('panel-resize-handle');
+        const panel = document.getElementById('properties-panel');
+        if (!handle || !panel) return;
+
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        // Load saved width from localStorage
+        const savedWidth = localStorage.getItem('panelWidth');
+        if (savedWidth) {
+            const width = parseInt(savedWidth, 10);
+            if (width >= 180 && width <= 400) {
+                panel.style.width = `${width}px`;
+            }
+        }
+
+        handle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = panel.offsetWidth;
+            handle.classList.add('resizing');
+            document.body.classList.add('resizing-panel');
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+
+            // Calculate new width (inverted because we're resizing from left edge of panel)
+            const deltaX = startX - e.clientX;
+            let newWidth = startWidth + deltaX;
+
+            // Clamp to min/max
+            newWidth = Math.max(180, Math.min(400, newWidth));
+
+            panel.style.width = `${newWidth}px`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                handle.classList.remove('resizing');
+                document.body.classList.remove('resizing-panel');
+
+                // Save to localStorage
+                localStorage.setItem('panelWidth', panel.offsetWidth);
+
+                // Re-render canvas to adjust for new size
+                this.renderer.handleResize();
+                this.render();
+            }
+        });
+    }
+
+    /**
+     * Set up panel text size control
+     */
+    setupPanelTextSize() {
+        const slider = document.getElementById('panel-text-size');
+        const valueDisplay = document.getElementById('panel-text-size-value');
+        if (!slider) return;
+
+        // Load saved value from localStorage
+        const savedSize = localStorage.getItem('panelTextSize');
+        if (savedSize) {
+            const size = parseInt(savedSize, 10);
+            if (size >= 80 && size <= 150) {
+                slider.value = size;
+                if (valueDisplay) valueDisplay.textContent = size;
+                document.documentElement.style.setProperty('--panel-text-scale', size / 100);
+            }
+        }
+
+        slider.addEventListener('input', (e) => {
+            const size = parseInt(e.target.value, 10);
+            if (valueDisplay) valueDisplay.textContent = size;
+            document.documentElement.style.setProperty('--panel-text-scale', size / 100);
+            localStorage.setItem('panelTextSize', size);
+        });
+    }
+
+    /**
+     * Set up settings modal
+     */
+    setupSettingsModal() {
+        const modal = document.getElementById('settings-modal');
+        const btnSettings = document.getElementById('btn-settings');
+        const btnClose = document.getElementById('close-settings');
+        const bgTypeRadios = document.querySelectorAll('input[name="bg-type"]');
+        const bgColorInput = document.getElementById('bg-color');
+        const bgColorValue = document.getElementById('bg-color-value');
+        const bgImageInput = document.getElementById('bg-image');
+        const btnChooseImage = document.getElementById('btn-choose-image');
+        const bgImageName = document.getElementById('bg-image-name');
+        const btnClearImage = document.getElementById('btn-clear-image');
+
+        // Open modal
+        btnSettings?.addEventListener('click', () => {
+            // Sync UI with current state
+            const state = this.store.getState();
+            const bg = state.background || {};
+
+            // Set radio button
+            bgTypeRadios.forEach(radio => {
+                radio.checked = radio.value === (bg.type || 'color');
+            });
+
+            // Set color
+            if (bgColorInput && bg.color) {
+                bgColorInput.value = bg.color;
+                if (bgColorValue) bgColorValue.textContent = bg.color;
+            }
+
+            // Set image name
+            if (bgImageName) {
+                bgImageName.textContent = bg.imagePath || 'No image selected';
+            }
+
+            // Show/hide clear button
+            if (btnClearImage) {
+                btnClearImage.classList.toggle('hidden', !bg.imagePath);
+            }
+
+            modal?.classList.remove('hidden');
+        });
+
+        // Close modal
+        btnClose?.addEventListener('click', () => {
+            modal?.classList.add('hidden');
+        });
+
+        // Close on backdrop click
+        modal?.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        });
+
+        // Background type change
+        bgTypeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                this.store.dispatch(actions.setBackground({ type: e.target.value }));
+            });
+        });
+
+        // Background color change
+        bgColorInput?.addEventListener('input', (e) => {
+            const color = e.target.value;
+            if (bgColorValue) bgColorValue.textContent = color;
+            this.store.dispatch(actions.setBackground({ color }));
+        });
+
+        // Choose image button
+        btnChooseImage?.addEventListener('click', () => {
+            bgImageInput?.click();
+        });
+
+        // Image file selected
+        bgImageInput?.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    this.store.dispatch(actions.setBackground({
+                        type: 'image',
+                        imagePath: file.name,
+                        imageData: img
+                    }));
+
+                    // Update UI
+                    if (bgImageName) bgImageName.textContent = file.name;
+                    if (btnClearImage) btnClearImage.classList.remove('hidden');
+
+                    // Set radio to image
+                    bgTypeRadios.forEach(radio => {
+                        radio.checked = radio.value === 'image';
+                    });
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Clear image
+        btnClearImage?.addEventListener('click', () => {
+            this.store.dispatch(actions.setBackground({
+                type: 'color',
+                imagePath: null,
+                imageData: null
+            }));
+
+            // Update UI
+            if (bgImageName) bgImageName.textContent = 'No image selected';
+            btnClearImage?.classList.add('hidden');
+            if (bgImageInput) bgImageInput.value = '';
+
+            // Set radio to color
+            bgTypeRadios.forEach(radio => {
+                radio.checked = radio.value === 'color';
+            });
+        });
+    }
+
+    /**
+     * Set up wavelength controls
+     */
+    setupWavelengthControls() {
+        const wavelengthSelect = document.getElementById('active-wavelength');
+        const btnManage = document.getElementById('btn-manage-wavelengths');
+
+        // Initial population
+        this.updateWavelengthDropdown();
+
+        // Wavelength selection change
+        wavelengthSelect?.addEventListener('change', (e) => {
+            this.store.dispatch(actions.setActiveWavelength(e.target.value));
+        });
+
+        // Manage wavelengths button - opens prompt for now (simplified)
+        btnManage?.addEventListener('click', () => {
+            const name = prompt('Enter wavelength name (e.g., "488nm Argon"):');
+            if (!name) return;
+
+            const color = prompt('Enter color hex code (e.g., "#00ffff"):');
+            if (!color || !color.match(/^#[0-9a-fA-F]{6}$/)) {
+                this.showToast('Invalid color format. Use #RRGGBB', 'warning');
+                return;
+            }
+
+            this.store.dispatch(actions.addWavelength(name, color));
+            this.updateWavelengthDropdown();
+            this.showToast(`Added wavelength: ${name}`, 'success');
+        });
+
+        // Subscribe to state changes to update dropdown
+        this.store.subscribe(() => {
+            this.updateWavelengthDropdown();
+        });
+    }
+
+    /**
+     * Update wavelength dropdown from state
+     */
+    updateWavelengthDropdown() {
+        const select = document.getElementById('active-wavelength');
+        if (!select) return;
+
+        const state = this.store.getState();
+        const wavelengths = state.wavelengths || [];
+        const activeId = state.activeWavelengthId;
+
+        // Clear and repopulate
+        select.innerHTML = '';
+        wavelengths.forEach(w => {
+            const option = document.createElement('option');
+            option.value = w.id;
+            option.textContent = w.name;
+            option.style.color = w.color;
+            if (w.id === activeId) option.selected = true;
+            select.appendChild(option);
         });
     }
 
@@ -1334,9 +1653,10 @@ class BeamPathOptimizerApp {
                                 x: origPos.x + dx,
                                 y: origPos.y + dy
                             };
-                            // Apply grid snapping if enabled for this component
-                            if (comp.snapToGrid !== false) {
-                                newPos = BeamPhysics.snapToGrid(newPos, 25);
+                            // Apply grid snapping if enabled globally and for this component
+                            const gridEnabled = state.grid?.enabled !== false;
+                            if (gridEnabled && comp.snapToGrid !== false) {
+                                newPos = BeamPhysics.snapToGrid(newPos, state.grid?.size || 25);
                             }
                             this.store.dispatch(actions.moveComponent(id, newPos));
                         }
@@ -1345,8 +1665,9 @@ class BeamPathOptimizerApp {
                 } else {
                     // Single component drag - position follows mouse directly
                     let newPos = { x: worldPos.x, y: worldPos.y };
-                    if (this.dragComponent.snapToGrid !== false) {
-                        newPos = BeamPhysics.snapToGrid(newPos, 25);
+                    const gridEnabled = state.grid?.enabled !== false;
+                    if (gridEnabled && this.dragComponent.snapToGrid !== false) {
+                        newPos = BeamPhysics.snapToGrid(newPos, state.grid?.size || 25);
                     }
                     this.store.dispatch(actions.moveComponent(this.dragComponent.id, newPos));
                 }
@@ -1560,6 +1881,10 @@ class BeamPathOptimizerApp {
             case 'c':
             case 'C':
                 this.setTool('connect');
+                break;
+            case 'r':
+            case 'R':
+                this.rotateSelectedComponents();
                 break;
             case 'm':
             case 'M':
@@ -1945,11 +2270,13 @@ class BeamPathOptimizerApp {
                 const screenX = e.clientX - rect.left;
                 const screenY = e.clientY - rect.top;
                 const worldPos = this.renderer.screenToWorld(screenX, screenY, state.ui.viewport);
-                const snappedPos = BeamPhysics.snapToGrid(worldPos, 25);
+                const gridSize = state.grid?.size || 25;
+                const gridEnabled = state.grid?.enabled !== false;
+                const snappedPos = gridEnabled ? BeamPhysics.snapToGrid(worldPos, gridSize) : worldPos;
 
                 // Update preview to show snapped position hint
                 this.dragPreviewElement.classList.add('over-canvas');
-                this.dragPreviewElement.dataset.snapped = `(${snappedPos.x}, ${snappedPos.y})`;
+                this.dragPreviewElement.dataset.snapped = `(${Math.round(snappedPos.x)}, ${Math.round(snappedPos.y)})`;
             } else {
                 this.dragPreviewElement.classList.remove('over-canvas');
             }
@@ -1969,7 +2296,9 @@ class BeamPathOptimizerApp {
                 const screenX = e.clientX - rect.left;
                 const screenY = e.clientY - rect.top;
                 const worldPos = this.renderer.screenToWorld(screenX, screenY, state.ui.viewport);
-                const snappedPos = BeamPhysics.snapToGrid(worldPos, 25);
+                const gridSize = state.grid?.size || 25;
+                const gridEnabled = state.grid?.enabled !== false;
+                const snappedPos = gridEnabled ? BeamPhysics.snapToGrid(worldPos, gridSize) : worldPos;
 
                 this.placeComponent(this.dragComponentType, snappedPos);
             }
@@ -2075,6 +2404,9 @@ class BeamPathOptimizerApp {
             return;
         }
 
+        // Get active wavelength for new beam
+        const activeWavelengthId = state.activeWavelengthId;
+
         // Create the segment with physics data
         const segment = new BeamSegment({
             sourceId: source.id,
@@ -2083,7 +2415,8 @@ class BeamPathOptimizerApp {
             targetPort: 'input',
             direction: validation.beamDirection,
             directionAngle: validation.beamAngle,
-            isValid: true
+            isValid: true,
+            wavelengthIds: activeWavelengthId ? [activeWavelengthId] : []
         });
 
         // Check if source component has fixed output distance constraint
@@ -2195,6 +2528,42 @@ class BeamPathOptimizerApp {
                 this.store.dispatch(actions.addComponent(clone));
             }
         });
+    }
+
+    /**
+     * Rotate selected components by 90 degrees clockwise
+     */
+    rotateSelectedComponents() {
+        const state = this.store.getState();
+
+        // Only works for component selection
+        if (state.ui.selection.type !== 'component' || state.ui.selection.selectedIds.length === 0) {
+            return;
+        }
+
+        let fixedCount = 0;
+        let rotatedCount = 0;
+
+        state.ui.selection.selectedIds.forEach(id => {
+            const component = state.components.get(id);
+            if (component) {
+                if (component.isAngleFixed) {
+                    fixedCount++;
+                } else {
+                    // Rotate 90 degrees clockwise, wrap at 360
+                    const newAngle = (component.angle + 90) % 360;
+                    this.store.dispatch(actions.updateComponent(id, { angle: newAngle }));
+                    rotatedCount++;
+                }
+            }
+        });
+
+        // Show feedback
+        if (fixedCount > 0 && rotatedCount === 0) {
+            this.showToast('Cannot rotate: angle is fixed', 'warning');
+        } else if (fixedCount > 0) {
+            this.showToast(`Rotated ${rotatedCount} component(s), ${fixedCount} fixed`, 'warning');
+        }
     }
 
     /**

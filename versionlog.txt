@@ -1,6 +1,54 @@
 BEAM PATH OPTIMIZER - VERSION LOG
 ================================================================================
 
+Version 1.2 (2025-12-03)
+--------------------------------------------------------------------------------
+New Features:
+
+  • Multiple Wavelengths / Beam Colors
+    - Select wavelength before adding beams (Beams section in left panel)
+    - 6 preset wavelengths: 633nm HeNe, 532nm Nd:YAG, 1064nm IR, 405nm Violet, 780nm GaAs, 850nm VCSEL
+    - Add custom wavelengths via gear button
+    - Segments can have multiple colors (displayed as divided line segments)
+    - Multi-color segments support for co-aligned beams
+
+  • Workspace Background Settings
+    - Settings button (gear icon) in toolbar
+    - Choose solid color with color picker
+    - Or select image file for background
+    - Image path saved in JSON (falls back to color if not found)
+
+  • Global Grid Settings
+    - New "Grid" section in left panel
+    - Toggle grid snapping on/off globally
+    - Adjustable grid size slider (1mm - 50mm)
+    - Updates visual grid and snap behavior
+
+UI/UX Improvements:
+
+  • Keyboard Shortcut: R Key Rotation
+    - Press R to rotate selected component(s) 90° clockwise
+    - Respects "Fixed Angle" setting - shows warning if angle is fixed
+    - Works with multiple selection
+
+  • Right Panel Improvements
+    - All items centered for cleaner appearance
+    - Draggable divider to resize panel width (180-400px)
+    - Text size slider (80-150%) at top of panel
+    - Settings persist in localStorage
+
+  • Left Panel Restructured
+    - "Tools" renamed to "Navigation" (Select, Pan)
+    - New "Beams" section for beam tools and wavelength selection
+    - Components, Zones, and Grid sections below
+
+Technical:
+  • Version bumped to 1.2
+  • State extended with grid, background, and wavelengths
+  • BeamSegment model supports wavelengthIds array
+  • Multi-color segment rendering in Renderer
+
+
 Version 1.1 (2025-12-02)
 --------------------------------------------------------------------------------
 UI/UX Improvements:

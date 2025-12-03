@@ -12,7 +12,7 @@ import { BeamPath } from './models/BeamPath.js';
  */
 export const APP_VERSION = {
     major: 1,
-    minor: 1,
+    minor: 2,
     toString() {
         return `V${this.major}.${this.minor}`;
     },
@@ -89,6 +89,19 @@ export const ActionType = {
     SET_VIEWPORT: 'SET_VIEWPORT',
     SET_WORKSPACE_SIZE: 'SET_WORKSPACE_SIZE',
 
+    // Grid actions
+    SET_GRID_SETTINGS: 'SET_GRID_SETTINGS',
+
+    // Background actions
+    SET_BACKGROUND: 'SET_BACKGROUND',
+
+    // Wavelength actions
+    ADD_WAVELENGTH: 'ADD_WAVELENGTH',
+    UPDATE_WAVELENGTH: 'UPDATE_WAVELENGTH',
+    DELETE_WAVELENGTH: 'DELETE_WAVELENGTH',
+    SET_ACTIVE_WAVELENGTH: 'SET_ACTIVE_WAVELENGTH',
+    UPDATE_SEGMENT_WAVELENGTHS: 'UPDATE_SEGMENT_WAVELENGTHS',
+
     // Document actions
     NEW_DOCUMENT: 'NEW_DOCUMENT',
     LOAD_DOCUMENT: 'LOAD_DOCUMENT',
@@ -155,7 +168,32 @@ export function createInitialState() {
             selectionBox: null,       // { startX, startY, endX, endY } for drag selection
             placingComponent: null, // Component type being placed
             connectingFrom: null    // Source component/port for beam connection
-        }
+        },
+
+        // Grid settings
+        grid: {
+            enabled: true,   // Global grid snapping on/off
+            size: 25         // Grid size in mm (1-50)
+        },
+
+        // Workspace background
+        background: {
+            type: 'color',       // 'color' or 'image'
+            color: '#0d1117',    // Default canvas-bg color
+            imagePath: null,     // Path to image file (for save/load)
+            imageData: null      // Runtime only: loaded image data (not saved)
+        },
+
+        // Wavelengths (beam colors)
+        wavelengths: [
+            { id: 'w1', name: '633nm HeNe', color: '#ff0000', isPreset: true },
+            { id: 'w2', name: '532nm Nd:YAG', color: '#00ff00', isPreset: true },
+            { id: 'w3', name: '1064nm IR', color: '#ff00ff', isPreset: true },
+            { id: 'w4', name: '405nm Violet', color: '#8800ff', isPreset: true },
+            { id: 'w5', name: '780nm GaAs', color: '#cc0044', isPreset: true },
+            { id: 'w6', name: '850nm VCSEL', color: '#990066', isPreset: true }
+        ],
+        activeWavelengthId: 'w1'  // Currently selected wavelength for new beams
     };
 }
 
@@ -693,6 +731,65 @@ export function reducer(state, action) {
             break;
         }
 
+        // ===== Grid Actions =====
+        case ActionType.SET_GRID_SETTINGS: {
+            newState.grid = {
+                ...state.grid,
+                ...action.settings
+            };
+            break;
+        }
+
+        // ===== Background Actions =====
+        case ActionType.SET_BACKGROUND: {
+            newState.background = {
+                ...state.background,
+                ...action.background
+            };
+            break;
+        }
+
+        // ===== Wavelength Actions =====
+        case ActionType.ADD_WAVELENGTH: {
+            const newId = 'w' + Date.now();
+            newState.wavelengths = [
+                ...state.wavelengths,
+                { id: newId, name: action.name, color: action.color, isPreset: false }
+            ];
+            break;
+        }
+
+        case ActionType.UPDATE_WAVELENGTH: {
+            newState.wavelengths = state.wavelengths.map(w =>
+                w.id === action.id ? { ...w, ...action.updates } : w
+            );
+            break;
+        }
+
+        case ActionType.DELETE_WAVELENGTH: {
+            newState.wavelengths = state.wavelengths.filter(w => w.id !== action.id);
+            // If active wavelength was deleted, switch to first one
+            if (state.activeWavelengthId === action.id && newState.wavelengths.length > 0) {
+                newState.activeWavelengthId = newState.wavelengths[0].id;
+            }
+            break;
+        }
+
+        case ActionType.SET_ACTIVE_WAVELENGTH: {
+            newState.activeWavelengthId = action.id;
+            break;
+        }
+
+        case ActionType.UPDATE_SEGMENT_WAVELENGTHS: {
+            // Update wavelengths for a beam segment
+            const segment = state.beamPath.segments.get(action.segmentId);
+            if (segment) {
+                segment.wavelengthIds = action.wavelengthIds;
+                newState.beamPath = state.beamPath; // Trigger re-render
+            }
+            break;
+        }
+
         // ===== Document Actions =====
         case ActionType.NEW_DOCUMENT: {
             return createInitialState();
@@ -756,6 +853,14 @@ export const actions = {
     setTool: (tool) => ({ type: ActionType.SET_TOOL, tool }),
     setViewport: (viewport) => ({ type: ActionType.SET_VIEWPORT, viewport }),
     setWorkspaceSize: (width, height) => ({ type: ActionType.SET_WORKSPACE_SIZE, width, height }),
+    setGridSettings: (settings) => ({ type: ActionType.SET_GRID_SETTINGS, settings }),
+    setBackground: (background) => ({ type: ActionType.SET_BACKGROUND, background }),
+
+    addWavelength: (name, color) => ({ type: ActionType.ADD_WAVELENGTH, name, color }),
+    updateWavelength: (id, updates) => ({ type: ActionType.UPDATE_WAVELENGTH, id, updates }),
+    deleteWavelength: (id) => ({ type: ActionType.DELETE_WAVELENGTH, id }),
+    setActiveWavelength: (id) => ({ type: ActionType.SET_ACTIVE_WAVELENGTH, id }),
+    updateSegmentWavelengths: (segmentId, wavelengthIds) => ({ type: ActionType.UPDATE_SEGMENT_WAVELENGTHS, segmentId, wavelengthIds }),
 
     newDocument: () => ({ type: ActionType.NEW_DOCUMENT }),
     loadDocument: (state) => ({ type: ActionType.LOAD_DOCUMENT, state }),

@@ -12,7 +12,7 @@
         <header id="toolbar">
             <div class="toolbar-left">
                 <span class="app-title">Beam Path Optimizer</span>
-                <span class="version-badge" id="app-version">V1.0</span>
+                <span class="version-badge" id="app-version">V1.2</span>
             </div>
             <div class="toolbar-center">
                 <button id="btn-new" class="toolbar-btn" title="New Project">New</button>
@@ -30,15 +30,53 @@
                     <input type="number" id="workspace-height" value="600" min="100" max="2000" step="50">
                     mm
                 </label>
+                <button id="btn-settings" class="toolbar-btn" title="Settings">&#9881;</button>
             </div>
         </header>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Settings</h2>
+                    <button id="close-settings" class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <section class="settings-section">
+                        <h3>Workspace Background</h3>
+                        <div class="settings-group">
+                            <label class="radio-label">
+                                <input type="radio" name="bg-type" value="color" checked>
+                                <span>Solid Color</span>
+                            </label>
+                            <div class="bg-color-picker">
+                                <input type="color" id="bg-color" value="#0d1117">
+                                <span id="bg-color-value">#0d1117</span>
+                            </div>
+                        </div>
+                        <div class="settings-group">
+                            <label class="radio-label">
+                                <input type="radio" name="bg-type" value="image">
+                                <span>Image File</span>
+                            </label>
+                            <div class="bg-image-picker">
+                                <input type="file" id="bg-image" accept="image/*" class="hidden">
+                                <button id="btn-choose-image" class="action-btn">Choose Image...</button>
+                                <span id="bg-image-name" class="hint">No image selected</span>
+                            </div>
+                            <button id="btn-clear-image" class="action-btn danger hidden">Clear Image</button>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
 
         <!-- Main Content Area -->
         <main id="main-content">
             <!-- Left Panel - Tools -->
             <aside id="tools-panel">
                 <section class="panel-section">
-                    <h3>Tools</h3>
+                    <h3>Navigation</h3>
                     <div class="tool-group">
                         <button class="tool-btn active" data-tool="select" title="Select (V)">
                             <span class="tool-icon">&#9654;</span>
@@ -48,10 +86,21 @@
                             <span class="tool-icon">&#9995;</span>
                             <span class="tool-label">Pan</span>
                         </button>
+                    </div>
+                </section>
+
+                <section class="panel-section">
+                    <h3>Beams</h3>
+                    <div class="tool-group">
                         <button class="tool-btn" data-tool="connect" title="Add Laser Beams (C)">
                             <span class="tool-icon">&#10132;</span>
                             <span class="tool-label">Add Beams</span>
                         </button>
+                    </div>
+                    <div class="wavelength-selector">
+                        <label for="active-wavelength">Wavelength:</label>
+                        <select id="active-wavelength"></select>
+                        <button id="btn-manage-wavelengths" class="action-btn small" title="Manage Wavelengths">&#9881;</button>
                     </div>
                 </section>
 
@@ -102,6 +151,23 @@
                         </button>
                     </div>
                 </section>
+
+                <section class="panel-section">
+                    <h3>Grid</h3>
+                    <div class="grid-controls">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="grid-enabled" checked>
+                            <span>Enable Grid Snap</span>
+                        </label>
+                        <div class="grid-size-control">
+                            <label for="grid-size-slider">Size: <span id="grid-size-value">25</span>mm</label>
+                            <div class="grid-size-inputs">
+                                <input type="range" id="grid-size-slider" min="1" max="50" value="25">
+                                <input type="number" id="grid-size-input" min="1" max="50" value="25" class="property-input small">
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </aside>
 
             <!-- Center - Canvas -->
@@ -115,8 +181,15 @@
                 </div>
             </div>
 
+            <!-- Panel Resize Handle -->
+            <div id="panel-resize-handle" title="Drag to resize panel"></div>
+
             <!-- Right Panel - Properties -->
             <aside id="properties-panel">
+                <div class="panel-text-size-control">
+                    <label for="panel-text-size">Text: <span id="panel-text-size-value">100</span>%</label>
+                    <input type="range" id="panel-text-size" min="80" max="150" value="100">
+                </div>
                 <section class="panel-section" id="selection-info">
                     <h3>Properties</h3>
                     <div id="no-selection" class="empty-state">

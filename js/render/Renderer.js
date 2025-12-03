@@ -76,6 +76,38 @@ export class Renderer {
     }
 
     /**
+     * Draw workspace background (color or image)
+     */
+    drawBackground(background, workspace, viewport) {
+        if (!background) return;
+
+        const ctx = this.ctx;
+        ctx.save();
+        this.applyViewportTransform(viewport);
+
+        // Calculate workspace bounds
+        const x = 0;
+        const y = 0;
+        const width = workspace.width;
+        const height = workspace.height;
+
+        if (background.type === 'color' && background.color) {
+            ctx.fillStyle = background.color;
+            ctx.fillRect(x, y, width, height);
+        } else if (background.type === 'image' && background.imageData) {
+            try {
+                ctx.drawImage(background.imageData, x, y, width, height);
+            } catch (e) {
+                // If image fails to draw, fall back to color
+                ctx.fillStyle = background.color || this.colors.background;
+                ctx.fillRect(x, y, width, height);
+            }
+        }
+
+        ctx.restore();
+    }
+
+    /**
      * Apply viewport transform (pan and zoom)
      */
     applyViewportTransform(viewport) {
@@ -540,10 +572,14 @@ export class Renderer {
     /**
      * Draw beam paths
      */
-    drawBeamPaths(beamPath, components, viewport, selection = {}) {
+    drawBeamPaths(beamPath, components, viewport, selection = {}, wavelengths = []) {
         const ctx = this.ctx;
         const componentMap = new Map();
         components.forEach(c => componentMap.set(c.id, c));
+
+        // Build wavelength lookup map
+        const wavelengthMap = new Map();
+        wavelengths.forEach(w => wavelengthMap.set(w.id, w));
 
         const selectedSegmentIds = selection.selectedSegmentIds || [];
         const hoveredSegmentId = selection.hoveredSegmentId;
@@ -565,17 +601,21 @@ export class Renderer {
             if (isSelected) thickness += 2;
             else if (isHovered) thickness += 1;
 
-            // Color based on selection, validity and branch
-            let color = segment.color || BRANCH_COLORS[segment.branchIndex % BRANCH_COLORS.length];
+            // Get colors from wavelengthIds or fallback to single color
+            let colors = [];
+            if (segment.wavelengthIds && segment.wavelengthIds.length > 0) {
+                colors = segment.wavelengthIds
+                    .map(id => wavelengthMap.get(id)?.color)
+                    .filter(c => c);
+            }
+            if (colors.length === 0) {
+                colors = [segment.color || BRANCH_COLORS[segment.branchIndex % BRANCH_COLORS.length]];
+            }
 
             // Invalid segment styling
             if (segment.isValid === false) {
-                color = '#ff4444';  // Red for invalid
+                colors = ['#ff4444'];  // Red for invalid
                 ctx.setLineDash([5, 5]);  // Dashed line
-            } else if (isSelected) {
-                ctx.setLineDash([]);  // Solid line
-            } else if (isHovered) {
-                ctx.setLineDash([]);  // Solid line
             } else {
                 ctx.setLineDash([]);  // Solid line
             }
@@ -606,21 +646,45 @@ export class Renderer {
                 ctx.globalAlpha = 1.0;
             }
 
-            ctx.strokeStyle = color;
             ctx.lineWidth = thickness;
             ctx.lineCap = 'round';
 
-            // Draw line
-            ctx.beginPath();
-            ctx.moveTo(startScreen.x, startScreen.y);
-            ctx.lineTo(endScreen.x, endScreen.y);
-            ctx.stroke();
+            // Draw multi-color line segments
+            if (colors.length === 1) {
+                // Single color - draw normal line
+                ctx.strokeStyle = colors[0];
+                ctx.beginPath();
+                ctx.moveTo(startScreen.x, startScreen.y);
+                ctx.lineTo(endScreen.x, endScreen.y);
+                ctx.stroke();
+            } else {
+                // Multiple colors - divide line into equal segments
+                const dx = endScreen.x - startScreen.x;
+                const dy = endScreen.y - startScreen.y;
+                const segmentCount = colors.length;
+
+                for (let i = 0; i < segmentCount; i++) {
+                    const t1 = i / segmentCount;
+                    const t2 = (i + 1) / segmentCount;
+
+                    const x1 = startScreen.x + dx * t1;
+                    const y1 = startScreen.y + dy * t1;
+                    const x2 = startScreen.x + dx * t2;
+                    const y2 = startScreen.y + dy * t2;
+
+                    ctx.strokeStyle = colors[i];
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+                }
+            }
 
             // Reset line dash
             ctx.setLineDash([]);
 
-            // Draw arrow in the middle
-            this.drawArrow(ctx, startScreen, endScreen, color);
+            // Draw arrow in the middle (use first color)
+            this.drawArrow(ctx, startScreen, endScreen, colors[0]);
 
             // Draw path length label
             if (segment.pathLength > 0) {
@@ -807,14 +871,24 @@ export class Renderer {
      * Main render method
      */
     render(state) {
-        const { components, beamPath, constraints, calculated, ui } = state;
+        const { components, beamPath, constraints, calculated, ui, grid, background, wavelengths } = state;
         const { viewport, selection, selectionBox } = ui;
+
+        // Update grid size from state if provided
+        if (grid && grid.size) {
+            this.gridSize = grid.size;
+        }
 
         // Clear canvas
         this.clear();
 
-        // Draw grid
-        this.drawGrid(constraints.workspace, viewport);
+        // Draw background
+        this.drawBackground(background, constraints.workspace, viewport);
+
+        // Draw grid (only if enabled)
+        if (!grid || grid.enabled) {
+            this.drawGrid(constraints.workspace, viewport);
+        }
 
         // Draw workspace boundary
         this.drawWorkspace(constraints.workspace, viewport);
@@ -824,7 +898,7 @@ export class Renderer {
         this.drawMountingZone(constraints.mountingZone, viewport, selection.selectedZoneId, selection.hoveredZoneId);
 
         // Draw beam paths (with selection state for highlighting)
-        this.drawBeamPaths(beamPath, Array.from(components.values()), viewport, selection);
+        this.drawBeamPaths(beamPath, Array.from(components.values()), viewport, selection, wavelengths);
 
         // Collect mount zone violations for highlighting
         const mountZoneViolations = new Set();
