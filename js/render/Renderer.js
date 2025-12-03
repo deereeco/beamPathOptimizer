@@ -934,8 +934,29 @@ export class Renderer {
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
         const arrowSize = 8;
 
-        // Always use black for arrow direction indicator
-        ctx.fillStyle = '#000000';
+        // Determine background color for contrast (same logic as labels)
+        const workspaceBgColor = this.currentBackground?.color || '#0d1117';
+        const isWorkspaceDark = this.isColorDark(workspaceBgColor);
+
+        // Draw contrast background circle
+        const bgRadius = arrowSize + 2;
+        if (isWorkspaceDark) {
+            // Dark workspace: light background
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        } else {
+            // Light workspace: dark background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        }
+        ctx.beginPath();
+        ctx.arc(midX, midY, bgRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw arrow - use contrasting color
+        if (isWorkspaceDark) {
+            ctx.fillStyle = '#000000';  // Dark arrow on light background
+        } else {
+            ctx.fillStyle = '#ffffff';  // Light arrow on dark background
+        }
         ctx.beginPath();
         ctx.moveTo(
             midX + arrowSize * Math.cos(angle),

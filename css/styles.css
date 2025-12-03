@@ -354,6 +354,22 @@ input[type="text"]:focus {
 .comp-label {
     font-size: 10px;
     color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.2;
+}
+
+/* Keyboard shortcuts displayed in UI */
+.shortcut {
+    font-size: 9px;
+    color: var(--text-muted);
+    opacity: 0.7;
+    font-weight: normal;
+    display: inline-block;
+    margin-left: 2px;
+}
+
+.checkbox-label .shortcut {
+    margin-left: 4px;
 }
 
 /* Zone icons */

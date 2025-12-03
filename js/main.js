@@ -2234,6 +2234,10 @@ class BeamPathOptimizerApp {
             case 'C':
                 this.setTool('connect');
                 break;
+            case 'l':
+            case 'L':
+                this.toggleLaser();
+                break;
             case 'r':
             case 'R':
                 this.rotateSelectedComponents();
@@ -2250,6 +2254,26 @@ class BeamPathOptimizerApp {
                 } else {
                     this.startPlacingComponent(ComponentType.SOURCE);
                 }
+                break;
+            case 'b':
+            case 'B':
+                this.startPlacingComponent(ComponentType.BEAM_SPLITTER);
+                break;
+            case 'n':
+            case 'N':
+                this.startPlacingComponent(ComponentType.LENS);
+                break;
+            case 'w':
+            case 'W':
+                this.startPlacingComponent(ComponentType.WAVEPLATE);
+                break;
+            case 'f':
+            case 'F':
+                this.startPlacingComponent(ComponentType.FILTER);
+                break;
+            case 'd':
+            case 'D':
+                this.startPlacingComponent(ComponentType.DETECTOR);
                 break;
             case 'z':
             case 'Z':
@@ -3728,6 +3752,32 @@ class BeamPathOptimizerApp {
         }
 
         return closestComponent ? { component: closestComponent, distance: closestDistance } : null;
+    }
+
+    /**
+     * Toggle laser on/off (keyboard shortcut)
+     */
+    toggleLaser() {
+        const state = this.store.getState();
+        const newState = !state.ui.autoPropagate;
+
+        // Update the checkbox UI
+        const checkbox = document.getElementById('auto-propagate-beams');
+        if (checkbox) {
+            checkbox.checked = newState;
+        }
+
+        // Dispatch the toggle action
+        this.store.dispatch(actions.toggleAutoPropagate());
+
+        // Propagate or clear beams based on new state
+        if (newState) {
+            // Turning laser on - propagate all beams from sources
+            this.propagateAllBeams();
+        } else {
+            // Turning laser off - remove all beams
+            this.clearAllBeams();
+        }
     }
 
     /**

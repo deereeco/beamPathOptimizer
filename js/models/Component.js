@@ -566,7 +566,8 @@ export class Component {
         const updatableProps = ['name', 'position', 'angle', 'size', 'mass',
                                 'reflectance', 'transmittance', 'isFixed', 'isAngleFixed', 'notes', 'mountZone',
                                 'isShallowAngle', 'shallowAngle', 'snapToGrid',
-                                'allowAnyAngle', 'pathConstraints'];
+                                'allowAnyAngle', 'pathConstraints',
+                                'labelPosition', 'labelVisible', 'labelBackgroundColor'];
 
         for (const key of updatableProps) {
             if (props[key] !== undefined) {

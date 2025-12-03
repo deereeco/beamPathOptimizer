@@ -155,9 +155,15 @@ A 2D GUI application for optimizing laser beam path component placement on an op
 | V | Select tool |
 | H | Pan tool |
 | C | Connect beam tool |
+| L | Toggle laser on/off |
 | R | Rotate selected components 90° clockwise |
-| M | Place mirror |
 | S | Place source (Ctrl+S = save) |
+| M | Place mirror |
+| B | Place beam splitter |
+| N | Place lens |
+| W | Place waveplate |
+| F | Place filter |
+| D | Place detector |
 | Delete/Backspace | Delete selected |
 | Escape | Clear selection, return to select tool |
 | Ctrl+Z | Undo |
