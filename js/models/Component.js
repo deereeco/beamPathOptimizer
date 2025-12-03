@@ -91,7 +91,7 @@ export const ComponentDefaults = {
         mountZone: { enabled: false, paddingX: 8, paddingY: 8, offsetX: 0, offsetY: 0 }
     },
     [ComponentType.WAVEPLATE]: {
-        size: { width: 20, height: 20 },
+        size: { width: 20, height: 5 },
         mass: 40,
         reflectance: 0.01,
         transmittance: 0.99,
@@ -100,7 +100,7 @@ export const ComponentDefaults = {
         mountZone: { enabled: false, paddingX: 10, paddingY: 10, offsetX: 0, offsetY: 0 }
     },
     [ComponentType.FILTER]: {
-        size: { width: 20, height: 20 },
+        size: { width: 20, height: 5 },
         mass: 30,
         reflectance: 0.1,
         transmittance: 0.9,

@@ -1,5 +1,10 @@
 /**
  * Simulated Annealing Optimizer for beam path component placement
+ *
+ * CONSTRAINT-FIRST APPROACH:
+ * - Beam angles are HARD constraints - moves that violate them are rejected entirely
+ * - Only allows moves that preserve beam geometry by construction
+ * - Validates workspace bounds and overlaps before accepting any move
  */
 
 import { calculateTotalCost } from './CostFunction.js';
@@ -11,12 +16,12 @@ import * as BeamPhysics from '../physics/BeamPhysics.js';
 export const DEFAULT_PARAMS = {
     initialTemp: 100,
     finalTemp: 0.1,
-    coolingRate: 0.99,
+    coolingRate: 0.995,
     iterationsPerTemp: 20,
     maxIterations: 10000,
     initialStepSize: 50,  // mm
-    minStepSize: 1,       // mm
-    earlyStopIterations: 1000  // Stop if no improvement for this many iterations
+    minStepSize: 2,       // mm
+    earlyStopIterations: 1500  // Stop if no improvement for this many iterations
 };
 
 /**
@@ -24,14 +29,14 @@ export const DEFAULT_PARAMS = {
  */
 export function getAdaptiveParams(movableCount) {
     // Scale iterations based on complexity
-    const baseIterations = Math.max(500, movableCount * 300);
+    const baseIterations = Math.max(1000, movableCount * 500);
 
     return {
         ...DEFAULT_PARAMS,
-        maxIterations: Math.min(baseIterations, 5000),
-        iterationsPerTemp: Math.max(10, movableCount * 5),
-        coolingRate: movableCount <= 5 ? 0.98 : 0.99,
-        earlyStopIterations: Math.max(200, movableCount * 100)
+        maxIterations: Math.min(baseIterations, 8000),
+        iterationsPerTemp: Math.max(15, movableCount * 5),
+        coolingRate: movableCount <= 5 ? 0.995 : 0.997,
+        earlyStopIterations: Math.max(500, movableCount * 150)
     };
 }
 
@@ -77,13 +82,13 @@ export class Optimizer {
         this.bestAngles = new Map();         // Best angles found so far
         this.currentAngles = new Map();      // Current working angles
 
-        // Store relative beam angles for constrained optimization
-        // Each component stores its beam input/output angles relative to its own orientation
-        this.relativeBeamAngles = new Map();
+        // Store initial beam segment lengths and angles for reference
+        this.initialSegmentLengths = new Map();
+        this.initialSegmentAngles = new Map();
 
-        // Snapshot storage for Results View (Feature 2)
-        this.snapshots = [];                 // Array of iteration snapshots
-        this.originalLayout = null;          // Layout before optimization started
+        // Snapshot storage for Results View
+        this.snapshots = [];
+        this.originalLayout = null;
 
         // Callbacks
         this.onProgress = null;
@@ -145,6 +150,9 @@ export class Optimizer {
             this.currentAngles.set(comp.id, comp.angle);
         }
 
+        // Store initial segment lengths
+        this.calculateInitialSegmentLengths(appState);
+
         // Calculate initial cost
         const initialResult = calculateTotalCost(appState, this.weights);
         this.currentCost = initialResult.total;
@@ -154,76 +162,36 @@ export class Optimizer {
 
         this.appState = appState;
 
-        // Calculate relative beam angles for constrained optimization
-        this.calculateRelativeBeamAngles();
-
         // Store original layout for Results View
         this.snapshots = [];
         this.originalLayout = this.captureSnapshot(0);
     }
 
     /**
-     * Calculate and store relative beam angles for each component.
-     * These are the beam input/output angles relative to the component's own orientation.
-     * This allows us to preserve the beam geometry when components rotate.
+     * Calculate and store initial segment lengths and angles
+     * These are the ACTUAL angles in the initial layout, which we want to preserve
      */
-    calculateRelativeBeamAngles() {
-        this.relativeBeamAngles.clear();
+    calculateInitialSegmentLengths(appState) {
+        this.initialSegmentLengths.clear();
+        this.initialSegmentAngles.clear();
+        const segments = appState.beamPath.getAllSegments();
 
-        const segments = this.appState.beamPath.getAllSegments();
-        if (segments.length === 0) return;
+        for (const segment of segments) {
+            const sourceComp = appState.components.get(segment.sourceId);
+            const targetComp = appState.components.get(segment.targetId);
 
-        // Process each component that's in the beam path
-        const components = this.appState.components;
+            if (sourceComp && targetComp) {
+                const dx = targetComp.position.x - sourceComp.position.x;
+                const dy = targetComp.position.y - sourceComp.position.y;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                this.initialSegmentLengths.set(segment.id, length);
 
-        for (const [compId, component] of components) {
-            const relativeAngles = {
-                inputs: [],   // Array of { fromId, relativeAngle }
-                outputs: []   // Array of { toId, port, relativeAngle }
-            };
-
-            const compAngle = component.angle;
-
-            // Get incoming beam angles
-            const incomingSegments = this.appState.beamPath.getIncomingSegments(compId);
-            for (const segment of incomingSegments) {
-                const sourceComp = components.get(segment.sourceId);
-                if (sourceComp) {
-                    const sourcePos = sourceComp.position;
-                    const targetPos = component.position;
-                    const beamAngle = BeamPhysics.calculateBeamAngle(sourcePos, targetPos);
-                    if (beamAngle !== null) {
-                        // Relative angle: beam angle from the component's reference frame
-                        const relativeInputAngle = BeamPhysics.normalizeAngleDiff(beamAngle - compAngle);
-                        relativeAngles.inputs.push({
-                            fromId: segment.sourceId,
-                            relativeAngle: relativeInputAngle
-                        });
-                    }
+                // Store the actual beam angle from the initial layout
+                if (length > 0.01) {
+                    const angle = BeamPhysics.vectorToAngle({ x: dx, y: dy });
+                    this.initialSegmentAngles.set(segment.id, angle);
                 }
             }
-
-            // Get outgoing beam angles
-            const outgoingSegments = this.appState.beamPath.getOutgoingSegments(compId);
-            for (const segment of outgoingSegments) {
-                const targetComp = components.get(segment.targetId);
-                if (targetComp) {
-                    const sourcePos = component.position;
-                    const targetPos = targetComp.position;
-                    const beamAngle = BeamPhysics.calculateBeamAngle(sourcePos, targetPos);
-                    if (beamAngle !== null) {
-                        // Relative angle: output beam angle from the component's reference frame
-                        const relativeOutputAngle = BeamPhysics.normalizeAngleDiff(beamAngle - compAngle);
-                        relativeAngles.outputs.push({
-                            toId: segment.targetId,
-                            port: segment.sourcePort,
-                            relativeAngle: relativeOutputAngle
-                        });
-                    }
-                }
-            }
-
-            this.relativeBeamAngles.set(compId, relativeAngles);
         }
     }
 
@@ -248,205 +216,6 @@ export class Optimizer {
             positions,
             angles
         };
-    }
-
-    /**
-     * Try moving a component by translating all downstream components by the same displacement.
-     * Returns the resulting cost and the new positions, without actually applying them.
-     */
-    tryMoveWithTranslation(targetId, newTargetPos, downstreamIds) {
-        const workspace = this.appState.constraints.workspace;
-        const targetComp = this.appState.components.get(targetId);
-        const oldTargetPos = this.currentPositions.get(targetId);
-
-        if (!targetComp || !oldTargetPos) return { cost: Infinity, positions: null };
-
-        // Calculate displacement
-        const displacement = {
-            x: newTargetPos.x - oldTargetPos.x,
-            y: newTargetPos.y - oldTargetPos.y
-        };
-
-        // Temporarily apply the move to calculate cost
-        const tempPositions = new Map();
-
-        // Move the target
-        let snappedTargetPos = targetComp.snapToGrid !== false
-            ? BeamPhysics.snapToGrid(newTargetPos, 25)
-            : newTargetPos;
-        snappedTargetPos = this.clampToWorkspace(targetComp, snappedTargetPos, workspace);
-        tempPositions.set(targetId, snappedTargetPos);
-
-        // Move downstream components by the same displacement
-        for (const downId of downstreamIds) {
-            const downComp = this.appState.components.get(downId);
-            if (downComp && !downComp.isFixed) {
-                const downOldPos = this.currentPositions.get(downId);
-                if (downOldPos) {
-                    let downNewPos = {
-                        x: downOldPos.x + displacement.x,
-                        y: downOldPos.y + displacement.y
-                    };
-                    if (downComp.snapToGrid !== false) {
-                        downNewPos = BeamPhysics.snapToGrid(downNewPos, 25);
-                    }
-                    downNewPos = this.clampToWorkspace(downComp, downNewPos, workspace);
-                    tempPositions.set(downId, downNewPos);
-                }
-            }
-        }
-
-        // Temporarily apply positions to calculate cost
-        const savedPositions = new Map();
-        tempPositions.forEach((pos, id) => {
-            const comp = this.appState.components.get(id);
-            if (comp) {
-                savedPositions.set(id, { ...comp.position });
-                comp.position = pos;
-            }
-        });
-
-        const costResult = calculateTotalCost(this.appState, this.weights);
-
-        // Restore original positions
-        savedPositions.forEach((pos, id) => {
-            const comp = this.appState.components.get(id);
-            if (comp) comp.position = pos;
-        });
-
-        return { cost: costResult.total, costResult, positions: tempPositions };
-    }
-
-    /**
-     * Try moving a component by rotating all downstream components around the new position.
-     * This preserves the relative beam angles from the component's perspective.
-     * Returns the resulting cost and the new positions, without actually applying them.
-     */
-    tryMoveWithRotation(sourceId, targetId, newTargetPos, downstreamIds) {
-        const workspace = this.appState.constraints.workspace;
-        const targetComp = this.appState.components.get(targetId);
-        const sourceComp = this.appState.components.get(sourceId);
-        const oldTargetPos = this.currentPositions.get(targetId);
-        const sourcePos = this.currentPositions.get(sourceId);
-
-        if (!targetComp || !sourceComp || !oldTargetPos || !sourcePos) {
-            return { cost: Infinity, positions: null, angles: null };
-        }
-
-        // Calculate old and new beam angles from source to target
-        const oldBeamAngle = BeamPhysics.calculateBeamAngle(sourcePos, oldTargetPos);
-        const newBeamAngle = BeamPhysics.calculateBeamAngle(sourcePos, newTargetPos);
-
-        if (oldBeamAngle === null || newBeamAngle === null) {
-            return { cost: Infinity, positions: null, angles: null };
-        }
-
-        // The rotation angle needed
-        const rotationAngle = BeamPhysics.normalizeAngleDiff(newBeamAngle - oldBeamAngle);
-
-        // Temporarily apply the move and rotation to calculate cost
-        const tempPositions = new Map();
-        const tempAngles = new Map();
-
-        // Move the target to new position
-        let snappedTargetPos = targetComp.snapToGrid !== false
-            ? BeamPhysics.snapToGrid(newTargetPos, 25)
-            : newTargetPos;
-        snappedTargetPos = this.clampToWorkspace(targetComp, snappedTargetPos, workspace);
-        tempPositions.set(targetId, snappedTargetPos);
-
-        // Rotate target's angle if it's not a transmission component that should stay aligned
-        if (!targetComp.isAngleFixed) {
-            const oldAngle = this.currentAngles.get(targetId) ?? targetComp.angle;
-            const newAngle = BeamPhysics.normalizeAngle(oldAngle + rotationAngle);
-            tempAngles.set(targetId, newAngle);
-        }
-
-        // Rotate downstream components around the target's NEW position
-        for (const downId of downstreamIds) {
-            const downComp = this.appState.components.get(downId);
-            if (downComp) {
-                // Rotate position around new target position
-                if (!downComp.isFixed) {
-                    const downOldPos = this.currentPositions.get(downId);
-                    if (downOldPos) {
-                        let downNewPos = this.rotatePointAroundPivot(downOldPos, snappedTargetPos, rotationAngle);
-                        if (downComp.snapToGrid !== false) {
-                            downNewPos = BeamPhysics.snapToGrid(downNewPos, 25);
-                        }
-                        downNewPos = this.clampToWorkspace(downComp, downNewPos, workspace);
-                        tempPositions.set(downId, downNewPos);
-                    }
-                }
-
-                // Rotate angle
-                if (!downComp.isAngleFixed) {
-                    const oldDownAngle = this.currentAngles.get(downId) ?? downComp.angle;
-                    const newDownAngle = BeamPhysics.normalizeAngle(oldDownAngle + rotationAngle);
-                    tempAngles.set(downId, newDownAngle);
-                }
-            }
-        }
-
-        // Temporarily apply positions and angles to calculate cost
-        const savedPositions = new Map();
-        const savedAngles = new Map();
-
-        tempPositions.forEach((pos, id) => {
-            const comp = this.appState.components.get(id);
-            if (comp) {
-                savedPositions.set(id, { ...comp.position });
-                comp.position = pos;
-            }
-        });
-
-        tempAngles.forEach((angle, id) => {
-            const comp = this.appState.components.get(id);
-            if (comp) {
-                savedAngles.set(id, comp.angle);
-                comp.angle = angle;
-            }
-        });
-
-        const costResult = calculateTotalCost(this.appState, this.weights);
-
-        // Restore original positions and angles
-        savedPositions.forEach((pos, id) => {
-            const comp = this.appState.components.get(id);
-            if (comp) comp.position = pos;
-        });
-
-        savedAngles.forEach((angle, id) => {
-            const comp = this.appState.components.get(id);
-            if (comp) comp.angle = angle;
-        });
-
-        return { cost: costResult.total, costResult, positions: tempPositions, angles: tempAngles };
-    }
-
-    /**
-     * Apply a set of positions and angles to the actual components and current state
-     */
-    applyTrialMove(positions, angles = null) {
-        if (positions) {
-            positions.forEach((pos, id) => {
-                const comp = this.appState.components.get(id);
-                if (comp) {
-                    comp.position = pos;
-                    this.currentPositions.set(id, pos);
-                }
-            });
-        }
-
-        if (angles) {
-            angles.forEach((angle, id) => {
-                const comp = this.appState.components.get(id);
-                if (comp) {
-                    comp.angle = angle;
-                    this.currentAngles.set(id, angle);
-                }
-            });
-        }
     }
 
     /**
@@ -504,7 +273,7 @@ export class Optimizer {
             return;
         }
 
-        // Run many iterations per frame - 200 is fast enough to feel responsive
+        // Run many iterations per frame
         const iterationsPerFrame = 200;
 
         for (let i = 0; i < iterationsPerFrame; i++) {
@@ -525,7 +294,7 @@ export class Optimizer {
             this.iteration++;
             this.iterationsSinceImprovement++;
 
-            // Store snapshot for Results View (sample every 10 iterations for efficiency)
+            // Store snapshot for Results View (sample every 10 iterations)
             if (this.iteration % 10 === 0) {
                 this.snapshots.push(this.captureSnapshot(this.iteration));
             }
@@ -536,7 +305,7 @@ export class Optimizer {
                 // Reduce step size as we cool
                 this.stepSize = Math.max(
                     this.params.minStepSize,
-                    this.stepSize * this.params.coolingRate
+                    this.stepSize * 0.998
                 );
             }
         }
@@ -546,7 +315,7 @@ export class Optimizer {
             ? ((this.initialCost - this.bestCost) / this.initialCost) * 100
             : 0;
 
-        // Report progress (wrapped in try/catch to prevent freezing)
+        // Report progress
         try {
             if (this.onProgress) {
                 const progress = this.iteration / this.params.maxIterations;
@@ -560,14 +329,13 @@ export class Optimizer {
                     initialCost: this.initialCost,
                     improvement,
                     stepSize: this.stepSize,
-                    acceptRate: this.acceptedMoves / (this.acceptedMoves + this.rejectedMoves) * 100,
+                    acceptRate: this.acceptedMoves / (this.acceptedMoves + this.rejectedMoves + 1) * 100,
                     costBreakdown: this.costBreakdown,
                     iterationsSinceImprovement: this.iterationsSinceImprovement
                 });
             }
 
-            // Notify step callback with best positions for live preview
-            // Only update every few frames to reduce render overhead
+            // Live preview every few frames
             if (this.onStep && this.iteration % 400 === 0) {
                 this.onStep(this.bestPositions);
             }
@@ -575,150 +343,205 @@ export class Optimizer {
             console.error('Error in optimizer callback:', err);
         }
 
-        // Schedule next batch (always, even if callbacks fail)
+        // Schedule next batch
         this.animationFrameId = requestAnimationFrame(() => this.runStep());
     }
 
     /**
-     * Perform a single SA iteration - constrained optimization that preserves beam geometry.
-     * For each move, tries both translation and rotation options, picking the lower cost.
+     * Perform a single optimization iteration using constraint-preserving moves
      */
     performIteration() {
-        const canMovePosition = this.movableIds.length > 0;
+        const segments = this.appState.beamPath.getAllSegments();
+        const hasBeamPath = segments.length > 0;
         const canMoveAngle = this.angleMovableIds.length > 0;
 
-        if (!canMovePosition && !canMoveAngle) {
+        if (this.movableIds.length === 0 && !canMoveAngle) {
             return;
         }
 
-        // Decide whether to move position or angle
-        // 30% chance for angle if both are available
-        const moveAngle = canMoveAngle && (!canMovePosition || Math.random() < 0.3);
+        // Choose move type based on what's available
+        // Move types:
+        // 1. Stretch segment (move component along beam direction) - preserves angles
+        // 2. Rotate component (90° increments) - cascades to downstream
+        // 3. Translate chain (move connected group together) - preserves geometry
 
-        if (moveAngle) {
-            this.performAngleIteration();
-            return;
-        }
+        const rand = Math.random();
 
-        // Get all beam segments
-        const segments = this.appState.beamPath.getAllSegments();
-        if (segments.length === 0) {
-            // No beam path - fall back to simple position move
+        if (hasBeamPath) {
+            if (rand < 0.50) {
+                // 50%: Stretch a segment (move along beam direction)
+                this.performStretchMove(segments);
+            } else if (rand < 0.75 && canMoveAngle) {
+                // 25%: Rotate a component
+                this.performRotateMove();
+            } else {
+                // 25%: Translate a chain
+                this.performTranslateChainMove(segments);
+            }
+        } else {
+            // No beam path - just do simple position moves
             this.performSimplePositionMove();
-            return;
         }
+    }
 
-        // Pick a random segment to adjust
-        const segmentIndex = Math.floor(Math.random() * segments.length);
-        const segment = segments[segmentIndex];
+    /**
+     * MOVE TYPE 1: Stretch a beam segment
+     * Moves the target component along the beam direction (forward or backward)
+     * This preserves beam angles by construction
+     */
+    performStretchMove(segments) {
+        if (segments.length === 0) return;
 
-        const sourceComp = this.appState.components.get(segment.sourceId);
+        // Pick a random segment
+        const segment = segments[Math.floor(Math.random() * segments.length)];
         const targetComp = this.appState.components.get(segment.targetId);
+        const sourceComp = this.appState.components.get(segment.sourceId);
 
-        if (!sourceComp || !targetComp || targetComp.isFixed) {
-            // Can't adjust - try simple move instead
-            this.performSimplePositionMove();
-            return;
-        }
+        if (!targetComp || !sourceComp || targetComp.isFixed) return;
 
         const sourcePos = this.currentPositions.get(segment.sourceId);
         const targetPos = this.currentPositions.get(segment.targetId);
 
         if (!sourcePos || !targetPos) return;
 
-        // Calculate current segment direction and length
+        // Calculate current beam direction
         const dx = targetPos.x - sourcePos.x;
         const dy = targetPos.y - sourcePos.y;
         const currentLength = Math.sqrt(dx * dx + dy * dy);
 
         if (currentLength < 1) return;
 
-        // Generate a random perturbation
-        // Either: change length along current direction, or move perpendicular
-        const moveType = Math.random();
+        // Normalize direction
+        const dirX = dx / currentLength;
+        const dirY = dy / currentLength;
 
-        let newTargetPos;
+        // Generate length change
+        const lengthChange = (Math.random() - 0.5) * 2 * this.stepSize;
+        const newLength = Math.max(25, currentLength + lengthChange);
 
-        if (moveType < 0.7) {
-            // 70%: Change segment length (along current direction)
-            const lengthChange = (Math.random() - 0.5) * 2 * this.stepSize;
-            const newLength = Math.max(25, currentLength + lengthChange);
-            const dirX = dx / currentLength;
-            const dirY = dy / currentLength;
-            newTargetPos = {
-                x: sourcePos.x + dirX * newLength,
-                y: sourcePos.y + dirY * newLength
-            };
-        } else {
-            // 30%: Random displacement (allows exploring different angles)
-            const angle = Math.random() * 2 * Math.PI;
-            const distance = Math.random() * this.stepSize;
-            newTargetPos = {
-                x: targetPos.x + distance * Math.cos(angle),
-                y: targetPos.y + distance * Math.sin(angle)
-            };
-        }
+        // Calculate new target position along beam direction
+        let newTargetPos = {
+            x: sourcePos.x + dirX * newLength,
+            y: sourcePos.y + dirY * newLength
+        };
+
+        // Snap to grid
+        newTargetPos = BeamPhysics.snapToGrid(newTargetPos, 25);
 
         // Get downstream components
         const downstreamIds = this.getDownstreamComponents(segment.targetId);
 
-        // Store original state for potential revert
-        const savedPositions = new Map();
-        const savedAngles = new Map();
-        savedPositions.set(segment.targetId, { ...targetComp.position });
-        this.currentPositions.forEach((pos, id) => {
-            savedPositions.set(id, { ...pos });
-        });
-        this.currentAngles.forEach((angle, id) => {
-            savedAngles.set(id, angle);
-        });
+        // Calculate displacement
+        const displacement = {
+            x: newTargetPos.x - targetPos.x,
+            y: newTargetPos.y - targetPos.y
+        };
 
-        // Try both options and pick the best one
-        const translationResult = this.tryMoveWithTranslation(segment.targetId, newTargetPos, downstreamIds);
-        const rotationResult = this.tryMoveWithRotation(segment.sourceId, segment.targetId, newTargetPos, downstreamIds);
+        // Try the move
+        const result = this.tryMove(segment.targetId, newTargetPos, downstreamIds, displacement);
 
-        // Pick the better option
-        let bestOption = null;
-        let bestCost = Infinity;
-        let bestCostResult = null;
-
-        if (translationResult.cost < rotationResult.cost) {
-            bestOption = { positions: translationResult.positions, angles: null };
-            bestCost = translationResult.cost;
-            bestCostResult = translationResult.costResult;
-        } else if (rotationResult.cost < Infinity) {
-            bestOption = { positions: rotationResult.positions, angles: rotationResult.angles };
-            bestCost = rotationResult.cost;
-            bestCostResult = rotationResult.costResult;
+        if (result.valid) {
+            this.acceptOrRejectMove(result);
+        } else {
+            this.rejectedMoves++;
         }
+    }
 
-        if (!bestOption || bestCost === Infinity) {
-            return;  // No valid move found
+    /**
+     * MOVE TYPE 2: Rotate a component by 90 degrees
+     * Repositions all downstream components along new beam directions
+     */
+    performRotateMove() {
+        if (this.angleMovableIds.length === 0) return;
+
+        // Pick a random component that can rotate
+        const compId = this.angleMovableIds[Math.floor(Math.random() * this.angleMovableIds.length)];
+        const component = this.appState.components.get(compId);
+        const currentAngle = this.currentAngles.get(compId);
+        const originalAngle = this.originalAngles.get(compId);
+
+        if (!component) return;
+
+        // Get valid angles
+        const validAngles = component.getValidAngles();
+
+        // Filter to 90-degree increments from original
+        const allowedAngles = validAngles.filter(angle => {
+            const diff = ((angle - originalAngle) % 360 + 360) % 360;
+            return diff === 0 || diff === 90 || diff === 180 || diff === 270;
+        });
+
+        if (allowedAngles.length <= 1) return;
+
+        // Pick a different angle
+        const otherAngles = allowedAngles.filter(a => Math.abs(a - currentAngle) > 1);
+        if (otherAngles.length === 0) return;
+
+        const newAngle = otherAngles[Math.floor(Math.random() * otherAngles.length)];
+        const angleDelta = newAngle - currentAngle;
+
+        // Try rotating with downstream repositioning
+        const result = this.tryRotateWithDownstream(compId, newAngle, angleDelta);
+
+        if (result.valid) {
+            this.acceptOrRejectMove(result);
+        } else {
+            this.rejectedMoves++;
         }
+    }
 
-        // Decide whether to accept using simulated annealing
-        const deltaCost = bestCost - this.currentCost;
-        const accept = deltaCost < 0 ||
-            Math.random() < Math.exp(-deltaCost / this.temperature);
+    /**
+     * MOVE TYPE 3: Translate a connected chain of components
+     * Moves a component and all downstream components by the same displacement
+     * Uses grid-aligned displacements to preserve angles exactly
+     */
+    performTranslateChainMove(segments) {
+        if (this.movableIds.length === 0) return;
 
-        if (accept) {
-            // Apply the move
-            this.applyTrialMove(bestOption.positions, bestOption.angles);
-            this.currentCost = bestCost;
-            this.acceptedMoves++;
+        // Pick a random movable component
+        const compId = this.movableIds[Math.floor(Math.random() * this.movableIds.length)];
+        const component = this.appState.components.get(compId);
+        const currentPos = this.currentPositions.get(compId);
 
-            // Update best if improved
-            if (bestCost < this.bestCost) {
-                this.bestCost = bestCost;
-                this.costBreakdown = bestCostResult;
-                this.iterationsSinceImprovement = 0;
-                this.currentPositions.forEach((pos, id) => {
-                    this.bestPositions.set(id, { ...pos });
-                });
-                this.currentAngles.forEach((angle, id) => {
-                    this.bestAngles.set(id, angle);
-                });
-            }
+        if (!component || !currentPos) return;
+
+        // Generate GRID-ALIGNED displacement to preserve angles exactly
+        // Pick random direction (cardinal or diagonal) and random number of grid steps
+        const gridSize = 25;
+        const maxSteps = Math.max(1, Math.floor(this.stepSize / gridSize));
+        const steps = Math.floor(Math.random() * maxSteps) + 1;
+
+        // 8 possible directions: cardinal (4) + diagonal (4)
+        const directions = [
+            { x: 1, y: 0 },   // right
+            { x: -1, y: 0 },  // left
+            { x: 0, y: 1 },   // down
+            { x: 0, y: -1 },  // up
+            { x: 1, y: 1 },   // diagonal
+            { x: 1, y: -1 },
+            { x: -1, y: 1 },
+            { x: -1, y: -1 }
+        ];
+        const dir = directions[Math.floor(Math.random() * directions.length)];
+
+        const displacement = {
+            x: dir.x * steps * gridSize,
+            y: dir.y * steps * gridSize
+        };
+
+        const newPos = {
+            x: currentPos.x + displacement.x,
+            y: currentPos.y + displacement.y
+        };
+
+        // Get all downstream components
+        const downstreamIds = this.getDownstreamComponents(compId);
+
+        // Try moving the whole chain
+        const result = this.tryMoveChain(compId, newPos, downstreamIds, displacement);
+
+        if (result.valid) {
+            this.acceptOrRejectMove(result);
         } else {
             this.rejectedMoves++;
         }
@@ -730,8 +553,7 @@ export class Optimizer {
     performSimplePositionMove() {
         if (this.movableIds.length === 0) return;
 
-        const randomIndex = Math.floor(Math.random() * this.movableIds.length);
-        const compId = this.movableIds[randomIndex];
+        const compId = this.movableIds[Math.floor(Math.random() * this.movableIds.length)];
         const currentPos = this.currentPositions.get(compId);
         const component = this.appState.components.get(compId);
 
@@ -744,32 +566,371 @@ export class Optimizer {
             y: currentPos.y + distance * Math.sin(angle)
         };
 
-        const workspace = this.appState.constraints.workspace;
-        newPos = this.clampToWorkspace(component, newPos, workspace);
+        newPos = BeamPhysics.snapToGrid(newPos, 25);
 
-        if (component.snapToGrid !== false) {
-            newPos = BeamPhysics.snapToGrid(newPos, 25);
+        const result = this.tryMove(compId, newPos, new Set(), { x: 0, y: 0 });
+
+        if (result.valid) {
+            this.acceptOrRejectMove(result);
+        } else {
+            this.rejectedMoves++;
+        }
+    }
+
+    /**
+     * Try a move and validate it
+     * Returns { valid, cost, costResult, positions, angles } or { valid: false }
+     */
+    tryMove(targetId, newTargetPos, downstreamIds, displacement) {
+        const workspace = this.appState.constraints.workspace;
+        const targetComp = this.appState.components.get(targetId);
+
+        if (!targetComp) return { valid: false };
+
+        // Build new positions map
+        const newPositions = new Map();
+
+        // Clamp target position to workspace
+        const clampedTargetPos = this.clampToWorkspace(targetComp, newTargetPos, workspace);
+        newPositions.set(targetId, clampedTargetPos);
+
+        // Recalculate actual displacement after clamping
+        const targetOldPos = this.currentPositions.get(targetId);
+        const actualDisplacement = {
+            x: clampedTargetPos.x - targetOldPos.x,
+            y: clampedTargetPos.y - targetOldPos.y
+        };
+
+        // Move downstream components by the SAME displacement (no independent snapping!)
+        for (const downId of downstreamIds) {
+            const downComp = this.appState.components.get(downId);
+            if (downComp && !downComp.isFixed) {
+                const downOldPos = this.currentPositions.get(downId);
+                if (downOldPos) {
+                    let downNewPos = {
+                        x: downOldPos.x + actualDisplacement.x,
+                        y: downOldPos.y + actualDisplacement.y
+                    };
+                    downNewPos = this.clampToWorkspace(downComp, downNewPos, workspace);
+                    newPositions.set(downId, downNewPos);
+                }
+            }
         }
 
-        const oldPos = { ...component.position };
-        component.position = newPos;
-        this.currentPositions.set(compId, newPos);
+        // Validate the move
+        if (!this.validateMove(newPositions, null)) {
+            return { valid: false };
+        }
 
-        const newCostResult = calculateTotalCost(this.appState, this.weights);
-        const newCost = newCostResult.total;
+        // Calculate cost
+        const costResult = this.calculateCostWithPositions(newPositions, null);
 
-        const deltaCost = newCost - this.currentCost;
-        const accept = deltaCost < 0 ||
-            Math.random() < Math.exp(-deltaCost / this.temperature);
+        return {
+            valid: true,
+            cost: costResult.total,
+            costResult,
+            positions: newPositions,
+            angles: null
+        };
+    }
+
+    /**
+     * Try moving a chain (component + all downstream) by displacement
+     * Displacement should be grid-aligned to preserve angles exactly
+     */
+    tryMoveChain(compId, newPos, downstreamIds, displacement) {
+        const workspace = this.appState.constraints.workspace;
+        const component = this.appState.components.get(compId);
+
+        if (!component) return { valid: false };
+
+        const newPositions = new Map();
+
+        // Move the main component
+        const clampedPos = this.clampToWorkspace(component, newPos, workspace);
+        newPositions.set(compId, clampedPos);
+
+        // Check if main component was clamped - if so, adjust displacement
+        const actualDisplacement = {
+            x: clampedPos.x - this.currentPositions.get(compId).x,
+            y: clampedPos.y - this.currentPositions.get(compId).y
+        };
+
+        // Move all downstream by the SAME displacement (no independent snapping!)
+        for (const downId of downstreamIds) {
+            const downComp = this.appState.components.get(downId);
+            if (downComp && !downComp.isFixed) {
+                const downOldPos = this.currentPositions.get(downId);
+                if (downOldPos) {
+                    let downNewPos = {
+                        x: downOldPos.x + actualDisplacement.x,
+                        y: downOldPos.y + actualDisplacement.y
+                    };
+                    downNewPos = this.clampToWorkspace(downComp, downNewPos, workspace);
+                    newPositions.set(downId, downNewPos);
+                }
+            }
+        }
+
+        // Validate
+        if (!this.validateMove(newPositions, null)) {
+            return { valid: false };
+        }
+
+        // Calculate cost
+        const costResult = this.calculateCostWithPositions(newPositions, null);
+
+        return {
+            valid: true,
+            cost: costResult.total,
+            costResult,
+            positions: newPositions,
+            angles: null
+        };
+    }
+
+    /**
+     * Try rotating a component and repositioning downstream
+     */
+    tryRotateWithDownstream(compId, newAngle, angleDelta) {
+        const workspace = this.appState.constraints.workspace;
+        const component = this.appState.components.get(compId);
+        const compPos = this.currentPositions.get(compId);
+
+        if (!component || !compPos) return { valid: false };
+
+        const newPositions = new Map();
+        const newAngles = new Map();
+
+        // Set new angle for the component
+        newAngles.set(compId, newAngle);
+
+        // Reposition downstream components along new beam directions
+        const visited = new Set([compId]);
+        this.repositionDownstreamForRotation(compId, newAngle, angleDelta, workspace, newPositions, newAngles, visited);
+
+        // Validate
+        if (!this.validateMove(newPositions, newAngles)) {
+            return { valid: false };
+        }
+
+        // Calculate cost
+        const costResult = this.calculateCostWithPositions(newPositions, newAngles);
+
+        return {
+            valid: true,
+            cost: costResult.total,
+            costResult,
+            positions: newPositions,
+            angles: newAngles
+        };
+    }
+
+    /**
+     * Recursively reposition downstream components after a rotation
+     */
+    repositionDownstreamForRotation(compId, newCompAngle, angleDelta, workspace, newPositions, newAngles, visited) {
+        const component = this.appState.components.get(compId);
+        const compPos = newPositions.get(compId) || this.currentPositions.get(compId);
+
+        if (!component || !compPos) return;
+
+        // Get outgoing segments
+        const outgoingSegments = this.appState.beamPath.getOutgoingSegments(compId);
+
+        for (const segment of outgoingSegments) {
+            const targetComp = this.appState.components.get(segment.targetId);
+            if (!targetComp || targetComp.isFixed || visited.has(segment.targetId)) continue;
+
+            visited.add(segment.targetId);
+
+            const targetOldPos = this.currentPositions.get(segment.targetId);
+            if (!targetOldPos) continue;
+
+            // Get current segment length
+            const dx = targetOldPos.x - compPos.x;
+            const dy = targetOldPos.y - compPos.y;
+            const segmentLength = Math.sqrt(dx * dx + dy * dy);
+
+            if (segmentLength < 1) continue;
+
+            // Calculate old beam angle
+            const oldBeamAngle = BeamPhysics.vectorToAngle({ x: dx, y: dy });
+
+            // New beam angle rotates by same delta
+            const newBeamAngle = BeamPhysics.normalizeAngle(oldBeamAngle + angleDelta);
+
+            // Calculate new target position
+            const dirVec = BeamPhysics.angleToVector(newBeamAngle);
+            let newTargetPos = {
+                x: compPos.x + dirVec.x * segmentLength,
+                y: compPos.y + dirVec.y * segmentLength
+            };
+
+            newTargetPos = BeamPhysics.snapToGrid(newTargetPos, 25);
+            newTargetPos = this.clampToWorkspace(targetComp, newTargetPos, workspace);
+
+            newPositions.set(segment.targetId, newTargetPos);
+
+            // Rotate target's angle too
+            if (!targetComp.isAngleFixed) {
+                const oldTargetAngle = this.currentAngles.get(segment.targetId) ?? targetComp.angle;
+                const newTargetAngle = BeamPhysics.normalizeAngle(oldTargetAngle + angleDelta);
+                newAngles.set(segment.targetId, newTargetAngle);
+            }
+
+            // Recurse
+            const targetNewAngle = newAngles.get(segment.targetId) || this.currentAngles.get(segment.targetId);
+            this.repositionDownstreamForRotation(segment.targetId, targetNewAngle, angleDelta, workspace, newPositions, newAngles, visited);
+        }
+    }
+
+    /**
+     * Validate a proposed move
+     * Returns true if the move satisfies basic constraints:
+     * - All components within workspace
+     * - No severe component overlaps
+     *
+     * Note: Beam angle preservation is handled by the move types themselves:
+     * - Stretch moves along beam direction (angle preserved by construction)
+     * - Translate moves everything together (angles preserved)
+     * - Rotate explicitly repositions downstream (angles intentionally changed)
+     */
+    validateMove(newPositions, newAngles) {
+        const workspace = this.appState.constraints.workspace;
+        const components = this.appState.components;
+
+        // Create temporary position map
+        const tempPositions = new Map(this.currentPositions);
+        if (newPositions) {
+            newPositions.forEach((pos, id) => tempPositions.set(id, pos));
+        }
+
+        // Check 1: All components within workspace
+        const margin = 15;
+        for (const [id, pos] of tempPositions) {
+            const comp = components.get(id);
+            if (!comp) continue;
+
+            if (pos.x < margin || pos.y < margin ||
+                pos.x > workspace.width - margin || pos.y > workspace.height - margin) {
+                return false;
+            }
+        }
+
+        // Check 2: No severe component overlaps
+        const compList = Array.from(components.values());
+        for (let i = 0; i < compList.length; i++) {
+            for (let j = i + 1; j < compList.length; j++) {
+                const comp1 = compList[i];
+                const comp2 = compList[j];
+
+                const pos1 = tempPositions.get(comp1.id);
+                const pos2 = tempPositions.get(comp2.id);
+
+                if (!pos1 || !pos2) continue;
+
+                const dx = pos2.x - pos1.x;
+                const dy = pos2.y - pos1.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                // Minimum distance based on component sizes
+                const size1 = Math.max(comp1.size.width, comp1.size.height);
+                const size2 = Math.max(comp2.size.width, comp2.size.height);
+                const minDist = (size1 + size2) * 0.25;
+
+                if (dist < minDist) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Calculate cost with temporary positions and angles
+     */
+    calculateCostWithPositions(newPositions, newAngles) {
+        // Temporarily apply positions
+        const savedPositions = new Map();
+        const savedAngles = new Map();
+
+        if (newPositions) {
+            newPositions.forEach((pos, id) => {
+                const comp = this.appState.components.get(id);
+                if (comp) {
+                    savedPositions.set(id, { ...comp.position });
+                    comp.position = pos;
+                }
+            });
+        }
+
+        if (newAngles) {
+            newAngles.forEach((angle, id) => {
+                const comp = this.appState.components.get(id);
+                if (comp) {
+                    savedAngles.set(id, comp.angle);
+                    comp.angle = angle;
+                }
+            });
+        }
+
+        // Calculate cost
+        const costResult = calculateTotalCost(this.appState, this.weights);
+
+        // Restore
+        savedPositions.forEach((pos, id) => {
+            const comp = this.appState.components.get(id);
+            if (comp) comp.position = pos;
+        });
+
+        savedAngles.forEach((angle, id) => {
+            const comp = this.appState.components.get(id);
+            if (comp) comp.angle = angle;
+        });
+
+        return costResult;
+    }
+
+    /**
+     * Accept or reject a move using simulated annealing criteria
+     */
+    acceptOrRejectMove(result) {
+        const deltaCost = result.cost - this.currentCost;
+        const accept = deltaCost < 0 || Math.random() < Math.exp(-deltaCost / this.temperature);
 
         if (accept) {
-            this.currentCost = newCost;
+            // Apply the move
+            if (result.positions) {
+                result.positions.forEach((pos, id) => {
+                    const comp = this.appState.components.get(id);
+                    if (comp) {
+                        comp.position = pos;
+                        this.currentPositions.set(id, pos);
+                    }
+                });
+            }
+
+            if (result.angles) {
+                result.angles.forEach((angle, id) => {
+                    const comp = this.appState.components.get(id);
+                    if (comp) {
+                        comp.angle = angle;
+                        this.currentAngles.set(id, angle);
+                    }
+                });
+            }
+
+            this.currentCost = result.cost;
             this.acceptedMoves++;
 
-            if (newCost < this.bestCost) {
-                this.bestCost = newCost;
-                this.costBreakdown = newCostResult;
+            // Update best if improved
+            if (result.cost < this.bestCost) {
+                this.bestCost = result.cost;
+                this.costBreakdown = result.costResult;
                 this.iterationsSinceImprovement = 0;
+
                 this.currentPositions.forEach((pos, id) => {
                     this.bestPositions.set(id, { ...pos });
                 });
@@ -778,38 +939,12 @@ export class Optimizer {
                 });
             }
         } else {
-            component.position = oldPos;
-            this.currentPositions.set(compId, oldPos);
             this.rejectedMoves++;
         }
     }
 
     /**
-     * Rotate a point around a pivot point by a given angle (in degrees)
-     */
-    rotatePointAroundPivot(point, pivot, angleDeg) {
-        const rad = BeamPhysics.degToRad(angleDeg);
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
-
-        // Translate to origin
-        const dx = point.x - pivot.x;
-        const dy = point.y - pivot.y;
-
-        // Rotate
-        const newX = dx * cos - dy * sin;
-        const newY = dx * sin + dy * cos;
-
-        // Translate back
-        return {
-            x: newX + pivot.x,
-            y: newY + pivot.y
-        };
-    }
-
-    /**
-     * Get all components connected downstream from a component (recursively)
-     * Returns a Set of component IDs
+     * Get all components downstream from a component
      */
     getDownstreamComponents(compId, visited = new Set()) {
         if (visited.has(compId)) return visited;
@@ -825,284 +960,15 @@ export class Optimizer {
     }
 
     /**
-     * Perform a single angle optimization iteration
-     * Angles are only changed in 90-degree increments from the original angle
-     * When angle changes, downstream components are repositioned along the new beam direction
-     * while preserving their relative beam angles from their own perspective.
-     */
-    performAngleIteration() {
-        if (this.angleMovableIds.length === 0) {
-            return;
-        }
-
-        // Pick a random angle-movable component
-        const randomIndex = Math.floor(Math.random() * this.angleMovableIds.length);
-        const compId = this.angleMovableIds[randomIndex];
-        const component = this.appState.components.get(compId);
-        const currentAngle = this.currentAngles.get(compId);
-        const originalAngle = this.originalAngles.get(compId);
-
-        // Get valid angles for this component type
-        const validAngles = component.getValidAngles();
-
-        // Filter to only allow 90-degree increments from the original angle
-        const allowedAngles = validAngles.filter(angle => {
-            const diff = ((angle - originalAngle) % 360 + 360) % 360;
-            return diff === 0 || diff === 90 || diff === 180 || diff === 270;
-        });
-
-        if (allowedAngles.length <= 1) {
-            return;  // No angle options available
-        }
-
-        // Pick a random new angle (different from current)
-        const otherAngles = allowedAngles.filter(a => a !== currentAngle);
-        if (otherAngles.length === 0) return;
-
-        const newAngle = otherAngles[Math.floor(Math.random() * otherAngles.length)];
-        const angleDelta = newAngle - currentAngle;
-
-        // Store old state for potential revert
-        const oldAngle = component.angle;
-        const savedPositions = new Map();
-        const savedAngles = new Map();
-
-        // Save all current positions and angles
-        this.currentPositions.forEach((pos, id) => {
-            savedPositions.set(id, { ...pos });
-        });
-        this.currentAngles.forEach((angle, id) => {
-            savedAngles.set(id, angle);
-        });
-
-        // Apply the angle change to the component
-        component.angle = newAngle;
-        this.currentAngles.set(compId, newAngle);
-
-        // Get the relative beam angles for this component
-        const relativeAngles = this.relativeBeamAngles.get(compId);
-        const workspace = this.appState.constraints.workspace;
-
-        // Recursively reposition downstream components along the rotated beam path
-        // preserving segment lengths and relative angles
-        if (relativeAngles && relativeAngles.outputs.length > 0) {
-            this.repositionDownstreamForRotation(compId, angleDelta, workspace);
-        }
-
-        // Calculate new cost
-        const newCostResult = calculateTotalCost(this.appState, this.weights);
-        const newCost = newCostResult.total;
-
-        // Decide whether to accept
-        const deltaCost = newCost - this.currentCost;
-        const accept = deltaCost < 0 ||
-            Math.random() < Math.exp(-deltaCost / this.temperature);
-
-        if (accept) {
-            // Accept the angle change
-            this.currentCost = newCost;
-            this.acceptedMoves++;
-
-            // Update best if improved
-            if (newCost < this.bestCost) {
-                this.bestCost = newCost;
-                this.costBreakdown = newCostResult;
-                this.iterationsSinceImprovement = 0;
-                this.currentPositions.forEach((pos, id) => {
-                    this.bestPositions.set(id, { ...pos });
-                });
-                this.currentAngles.forEach((angle, id) => {
-                    this.bestAngles.set(id, angle);
-                });
-            }
-        } else {
-            // Reject - revert all positions and angles
-            component.angle = oldAngle;
-
-            savedPositions.forEach((pos, id) => {
-                const comp = this.appState.components.get(id);
-                if (comp) {
-                    comp.position = pos;
-                    this.currentPositions.set(id, pos);
-                }
-            });
-
-            savedAngles.forEach((angle, id) => {
-                const comp = this.appState.components.get(id);
-                if (comp) {
-                    comp.angle = angle;
-                    this.currentAngles.set(id, angle);
-                }
-            });
-
-            this.rejectedMoves++;
-        }
-    }
-
-    /**
-     * Recursively reposition downstream components when a component rotates.
-     * Preserves segment lengths and rotates component angles to maintain their
-     * relative beam input/output angles from their own perspective.
-     */
-    repositionDownstreamForRotation(compId, angleDelta, workspace, visited = new Set()) {
-        if (visited.has(compId)) return;
-        visited.add(compId);
-
-        const component = this.appState.components.get(compId);
-        const compPos = this.currentPositions.get(compId);
-        const relativeAngles = this.relativeBeamAngles.get(compId);
-
-        if (!component || !compPos || !relativeAngles) return;
-
-        // For each outgoing beam segment
-        const outgoingSegments = this.appState.beamPath.getOutgoingSegments(compId);
-
-        for (const segment of outgoingSegments) {
-            const targetComp = this.appState.components.get(segment.targetId);
-            if (!targetComp || targetComp.isFixed) continue;
-
-            const targetOldPos = this.currentPositions.get(segment.targetId);
-            if (!targetOldPos) continue;
-
-            // Find the relative output angle for this segment
-            const outputInfo = relativeAngles.outputs.find(o => o.toId === segment.targetId);
-            if (!outputInfo) continue;
-
-            // Calculate the current segment length
-            const dx = targetOldPos.x - compPos.x;
-            const dy = targetOldPos.y - compPos.y;
-            const segmentLength = Math.sqrt(dx * dx + dy * dy);
-
-            if (segmentLength < 1) continue;
-
-            // Calculate new absolute output beam direction
-            // The component rotated by angleDelta, so the absolute output direction rotates too
-            const currentCompAngle = this.currentAngles.get(compId);
-            const newAbsoluteOutputAngle = BeamPhysics.normalizeAngle(currentCompAngle + outputInfo.relativeAngle);
-
-            // Calculate new target position along the rotated beam direction
-            const dirVec = BeamPhysics.angleToVector(newAbsoluteOutputAngle);
-            let newTargetPos = {
-                x: compPos.x + dirVec.x * segmentLength,
-                y: compPos.y + dirVec.y * segmentLength
-            };
-
-            // Apply grid snapping and workspace constraints
-            if (targetComp.snapToGrid !== false) {
-                newTargetPos = BeamPhysics.snapToGrid(newTargetPos, 25);
-            }
-            newTargetPos = this.clampToWorkspace(targetComp, newTargetPos, workspace);
-
-            // Update target component position
-            targetComp.position = newTargetPos;
-            this.currentPositions.set(segment.targetId, newTargetPos);
-
-            // Rotate the target component's angle by the same delta
-            // This preserves its relative beam input angle from its own perspective
-            if (!targetComp.isAngleFixed) {
-                const oldTargetAngle = this.currentAngles.get(segment.targetId) ?? targetComp.angle;
-                const newTargetAngle = BeamPhysics.normalizeAngle(oldTargetAngle + angleDelta);
-                targetComp.angle = newTargetAngle;
-                this.currentAngles.set(segment.targetId, newTargetAngle);
-            }
-
-            // Recursively reposition this target's downstream components
-            this.repositionDownstreamForRotation(segment.targetId, angleDelta, workspace, visited);
-        }
-    }
-
-    /**
-     * Clamp a position so the component (and its mount zone) stays within workspace
+     * Clamp position to workspace bounds
      */
     clampToWorkspace(component, pos, workspace) {
-        // Get component's half-dimensions from its bounding box at origin
-        const originalPos = component.position;
-        component.position = { x: 0, y: 0 };
-        const bbox = component.getBoundingBox();
-        component.position = originalPos;
+        const margin = Math.max(component.size.width, component.size.height) / 2 + 10;
 
-        // Component extents relative to its center position
-        const compLeft = bbox.minX;
-        const compRight = bbox.maxX;
-        const compTop = bbox.minY;
-        const compBottom = bbox.maxY;
-
-        // Start with component bounds
-        let minX = -compLeft;
-        let maxX = workspace.width - compRight;
-        let minY = -compTop;
-        let maxY = workspace.height - compBottom;
-
-        // If component has mount zone, expand the constraints
-        if (component.mountZone && component.mountZone.enabled) {
-            const padding = component.mountZone.padding || { x: 10, y: 10 };
-            const offset = component.mountZone.offset || { x: 0, y: 0 };
-
-            // Mount zone extends beyond component bounds
-            const mountLeft = compLeft - padding.x + offset.x;
-            const mountRight = compRight + padding.x + offset.x;
-            const mountTop = compTop - padding.y + offset.y;
-            const mountBottom = compBottom + padding.y + offset.y;
-
-            minX = Math.max(minX, -mountLeft);
-            maxX = Math.min(maxX, workspace.width - mountRight);
-            minY = Math.max(minY, -mountTop);
-            maxY = Math.min(maxY, workspace.height - mountBottom);
-        }
-
-        // Clamp the position
         return {
-            x: Math.max(minX, Math.min(maxX, pos.x)),
-            y: Math.max(minY, Math.min(maxY, pos.y))
+            x: Math.max(margin, Math.min(workspace.width - margin, pos.x)),
+            y: Math.max(margin, Math.min(workspace.height - margin, pos.y))
         };
-    }
-
-    /**
-     * Constrain position based on fixed path length constraints
-     * If an incoming or outgoing segment has a fixed length, constrain the position
-     */
-    constrainToFixedLengths(component, proposedPos) {
-        const beamPath = this.appState.beamPath;
-
-        // Get incoming segments with fixed length
-        const incomingSegments = beamPath.getIncomingSegments(component.id);
-        for (const segment of incomingSegments) {
-            if (segment.isFixedLength && segment.fixedLength !== null) {
-                const sourceComp = this.appState.components.get(segment.sourceId);
-                if (sourceComp) {
-                    // Constrain to circle at fixed distance from source
-                    const fixedDist = segment.fixedLength;
-                    const sourcePos = sourceComp.position;
-
-                    // Calculate direction from source to proposed position
-                    const dx = proposedPos.x - sourcePos.x;
-                    const dy = proposedPos.y - sourcePos.y;
-                    const currentDist = Math.sqrt(dx * dx + dy * dy);
-
-                    if (currentDist > 0) {
-                        // Project to the fixed distance
-                        proposedPos = {
-                            x: sourcePos.x + (dx / currentDist) * fixedDist,
-                            y: sourcePos.y + (dy / currentDist) * fixedDist
-                        };
-                    }
-                }
-            }
-        }
-
-        // Get outgoing segments with fixed length
-        const outgoingSegments = beamPath.getOutgoingSegments(component.id);
-        for (const segment of outgoingSegments) {
-            if (segment.isFixedLength && segment.fixedLength !== null) {
-                const targetComp = this.appState.components.get(segment.targetId);
-                if (targetComp && !targetComp.isFixed) {
-                    // The target needs to move too, but we handle that through
-                    // the cost function penalty - it will naturally converge
-                }
-            }
-        }
-
-        return proposedPos;
     }
 
     /**
@@ -1251,8 +1117,7 @@ export class Optimizer {
     }
 
     /**
-     * Apply a snapshot to the current state.
-     * Used by Results View to preview or apply a selected iteration.
+     * Apply a snapshot to the current state
      */
     applySnapshot(snapshot, components) {
         if (!snapshot) return;

@@ -142,8 +142,9 @@ export class ResultsGraph {
      */
     handleMouseMove(event) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
+        // Scale mouse coordinates to match canvas internal resolution
+        const x = (event.clientX - rect.left) * (this.canvas.width / rect.width);
+        const y = (event.clientY - rect.top) * (this.canvas.height / rect.height);
 
         const index = this.canvasToDataIndex(x, y);
 
@@ -162,8 +163,9 @@ export class ResultsGraph {
      */
     handleClick(event) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
+        // Scale mouse coordinates to match canvas internal resolution
+        const x = (event.clientX - rect.left) * (this.canvas.width / rect.width);
+        const y = (event.clientY - rect.top) * (this.canvas.height / rect.height);
 
         const index = this.canvasToDataIndex(x, y);
 
@@ -182,8 +184,9 @@ export class ResultsGraph {
      */
     handleDoubleClick(event) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
+        // Scale mouse coordinates to match canvas internal resolution
+        const x = (event.clientX - rect.left) * (this.canvas.width / rect.width);
+        const y = (event.clientY - rect.top) * (this.canvas.height / rect.height);
 
         const index = this.canvasToDataIndex(x, y);
 

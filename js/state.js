@@ -12,7 +12,7 @@ import { BeamPath } from './models/BeamPath.js';
  */
 export const APP_VERSION = {
     major: 1,
-    minor: 0,
+    minor: 1,
     toString() {
         return `V${this.major}.${this.minor}`;
     },

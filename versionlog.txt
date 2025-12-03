@@ -1,0 +1,124 @@
+BEAM PATH OPTIMIZER - VERSION LOG
+================================================================================
+
+Version 1.1 (2025-12-02)
+--------------------------------------------------------------------------------
+UI/UX Improvements:
+  • Added drag-and-drop for components from palette to canvas
+    - Click and drag components from the left panel directly onto the canvas
+    - Visual preview follows cursor while dragging
+    - Green border and coordinate indicator when over canvas
+    - Shows grid-snapped position where component will be placed
+    - Makes grid snapping immediately apparent to users
+
+  • Fixed component proportions in palette
+    - Waveplate and Filter icons now display as thin rectangles (matching mirrors)
+    - Previously displayed as squares which was misleading
+    - All palette icons now accurately represent their actual component shapes
+
+  • Updated default component sizes for accuracy
+    - Waveplate: changed from 20×20mm (square) to 20×5mm (rectangle)
+    - Filter: changed from 20×20mm (square) to 20×5mm (rectangle)
+    - Beam splitters and detectors remain square as physically accurate
+    - Mirrors, lenses, and waveplates/filters now display as rectangles
+
+User Experience:
+  • Component buttons now show grab cursor (hand) to indicate draggability
+  • Removed confusing two-click placement workflow
+  • Keyboard shortcuts still work for quick component placement
+
+
+Version 1.0 (Initial Release)
+--------------------------------------------------------------------------------
+Core Features:
+  • HTML5 Canvas-based optical table designer
+  • 7 component types: Source, Mirror, Beam Splitter, Lens, Waveplate, Filter, Detector
+  • Interactive beam path visualization with color coding
+  • Pan (shift+drag/middle mouse) and zoom (scroll wheel)
+  • Grid background with 25mm snap
+
+Component Management:
+  • Click-to-place components (deprecated in v1.1)
+  • Drag to reposition components
+  • Component property editing panel
+  • Multi-select with Ctrl+click or drag selection box
+  • Fixed position/angle locks for optimization
+
+Beam Path System:
+  • "Add Beams" tool for connecting components
+  • Automatic beam physics (reflection, transmission)
+  • Beam splitters create reflected and transmitted paths
+  • Color coding by branch level (red → orange → yellow → green)
+  • Line thickness represents beam power
+  • Direction arrows on segments
+  • Segment selection and deletion
+
+Constraints & Zones:
+  • Keep-out zones (areas where components cannot be placed)
+  • Mounting zone (target area for center of mass)
+  • Per-component mount zones with X/Y padding and offset
+  • Visual feedback for constraint violations
+
+Center of Mass Tracking:
+  • Real-time CoM calculation weighted by component mass
+  • Crosshair display on canvas
+  • Status bar shows if CoM is inside mounting zone
+
+Optimization (Simulated Annealing):
+  • Adaptive parameters based on component count
+  • Cost function: CoM distance, footprint, path length, violations
+  • Constrained moves preserve relative beam angles
+  • Fixed angle mode for components
+  • Beam collision detection and penalties
+  • Progress tracking: iteration count, improvement %, violations
+  • Pause/Resume/Accept/Revert workflow
+
+Results View Mode:
+  • Cost vs iteration graph with interactive selection
+  • Hover to see iteration details
+  • Click/double-click to preview any iteration's layout
+  • Split-screen comparison mode (original vs selected)
+  • Apply any iteration, not just the best
+  • Snapshot storage every 10 iterations
+
+File Management:
+  • Save to JSON (full state serialization)
+  • Load from JSON with version checking
+  • Migration prompts for older file formats
+  • Unsaved changes warnings
+
+Undo/Redo:
+  • Full history stack for all state changes
+  • Ctrl+Z / Ctrl+Y keyboard shortcuts
+
+Beam Physics:
+  • Default angles: 0° for transmission optics, 45° for mirrors
+  • Source emission direction control
+  • Shallow angle mode for beam splitters
+  • Movement constraints to prevent breaking beam angles
+  • Automatic angle snapping to valid values
+
+Keyboard Shortcuts:
+  • V: Select tool
+  • H: Pan tool
+  • C: Connect beam tool
+  • M: Place mirror
+  • S: Place source (Ctrl+S saves)
+  • Delete/Backspace: Delete selected
+  • Escape: Clear selection
+  • Ctrl+Z: Undo
+  • Ctrl+Y: Redo
+  • +/-: Zoom in/out
+
+Status Bar:
+  • Center of Mass position
+  • Mount zone status (OK/OUTSIDE/Not defined)
+  • Violation count
+  • Component count
+  • Zoom level
+  • Cursor position in workspace coordinates
+
+Version Tracking:
+  • Version badge displayed in top left toolbar
+  • File format versioning for compatibility
+  • Version comparison utilities for migration detection

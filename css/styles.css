@@ -263,30 +263,44 @@ input[type="text"]:focus {
 }
 
 .comp-icon.source {
+    width: 32px;
+    height: 16px;
     background: linear-gradient(135deg, #ef4444, #dc2626);
 }
 
 .comp-icon.mirror {
+    width: 28px;
+    height: 6px;
     background: linear-gradient(135deg, #3b82f6, #2563eb);
 }
 
 .comp-icon.beam_splitter {
+    width: 28px;
+    height: 28px;
     background: linear-gradient(135deg, #8b5cf6, #7c3aed);
 }
 
 .comp-icon.lens {
+    width: 8px;
+    height: 28px;
     background: linear-gradient(135deg, #06b6d4, #0891b2);
 }
 
 .comp-icon.waveplate {
+    width: 28px;
+    height: 7px;
     background: linear-gradient(135deg, #f59e0b, #d97706);
 }
 
 .comp-icon.filter {
+    width: 28px;
+    height: 7px;
     background: linear-gradient(135deg, #22c55e, #16a34a);
 }
 
 .comp-icon.detector {
+    width: 28px;
+    height: 28px;
     background: linear-gradient(135deg, #64748b, #475569);
 }
 
@@ -733,6 +747,64 @@ input[type="checkbox"] {
     z-index: 1000;
     opacity: 0.8;
     transform: translate(-50%, -50%);
+}
+
+/* Component drag from palette */
+.component-drag-preview {
+    position: fixed;
+    pointer-events: none;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    background: var(--bg-panel);
+    border: 2px solid var(--accent);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    transform: translate(-50%, -50%);
+    opacity: 0.9;
+}
+
+.component-drag-preview .comp-icon {
+    border-radius: 3px;
+}
+
+.component-drag-preview .comp-name {
+    font-size: 11px;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.component-drag-preview.over-canvas {
+    border-color: var(--success);
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.component-drag-preview.over-canvas::after {
+    content: attr(data-snapped);
+    position: absolute;
+    bottom: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--success);
+    white-space: nowrap;
+    background: var(--bg-panel);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+/* Make component buttons indicate draggable */
+.component-btn {
+    cursor: grab;
+    user-select: none;
+}
+
+.component-btn:active {
+    cursor: grabbing;
 }
 
 /* ===== Toast Notifications ===== */

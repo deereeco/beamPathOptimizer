@@ -283,11 +283,12 @@ Key variables in `:root` (css/styles.css):
 - [x] **Segment Highlighting**: Selected segments show blue glow, hovered segments show lighter glow
 
 ### Phase 4: Version Control - COMPLETED
-- [x] **Version Display**: Version badge (V1.0) shown in top left toolbar
+- [x] **Version Display**: Version badge shown in top left toolbar (currently V1.1)
 - [x] **Version Tracking**: `APP_VERSION` constant in state.js with `toString()` and `toFileFormat()` methods
 - [x] **Version Comparison**: `compareVersions()` and `needsMigration()` utilities added
 - [x] **File Format**: Save files now include `formatVersion` and `appVersion`
 - [x] **Migration Prompt**: When opening older files, user is prompted to update to current version
+- [x] **Version Log**: `versionlog.txt` tracks all changes and improvements between versions
 
 ### Files Modified
 | File | Changes |
@@ -445,3 +446,89 @@ For each component in beam path:
 | Split-screen comparison | ✅ Original vs Selected |
 | Apply any iteration | ✅ No warning |
 | Escape to exit preview | ✅ Keyboard support |
+
+---
+
+## Phase 6: UI Polish & Component Proportions - COMPLETED (V1.1)
+
+### Feature 1: Accurate Component Proportions
+
+**Problem**: Waveplates and filters appeared as squares in both the palette and default placement, but should be thin rectangles like mirrors (transmission optics are thin).
+
+**Solution**:
+- Updated default sizes in `ComponentDefaults` (Component.js)
+  - Waveplate: 20×20mm → 20×5mm
+  - Filter: 20×20mm → 20×5mm
+- Updated CSS for palette icons to show proportional shapes
+  - All component icons now match their actual aspect ratios
+  - Beam splitters and detectors remain square (physically accurate)
+
+### Feature 2: Drag-and-Drop Component Placement
+
+**Problem**: Two-click workflow (click palette → click canvas) was not intuitive. Users didn't understand they needed to click again on the canvas.
+
+**Solution**: Full drag-and-drop implementation from palette to canvas.
+
+**Implementation Details**:
+
+1. **Palette Button Events**:
+   - `mousedown` on component button starts tracking
+   - 5px movement threshold before drag begins (prevents accidental drags)
+
+2. **Drag State**:
+   ```javascript
+   this.isDraggingFromPalette = false;
+   this.dragComponentType = null;
+   this.dragPreviewElement = null;
+   this.paletteMouseStart = { x, y };
+   ```
+
+3. **Visual Preview**:
+   - Creates floating div that follows cursor
+   - Shows component icon and name
+   - Blue border by default
+   - Green border when over canvas (indicates valid drop zone)
+   - Displays snapped grid coordinates below preview
+
+4. **Grid Snap Feedback**:
+   - Calculates world position from screen coordinates
+   - Applies `BeamPhysics.snapToGrid()` with 25mm grid
+   - Shows exact coordinates where component will be placed
+   - Makes grid snapping immediately visible to user
+
+5. **Drop Handling**:
+   - Only places component if dropped on canvas
+   - Automatically snaps to grid
+   - Cleans up preview element
+   - Resets drag state
+
+**User Experience Improvements**:
+- Component buttons show `cursor: grab` / `cursor: grabbing`
+- Smooth dragging with visual feedback
+- Clear indication of valid drop zones
+- Grid snap is now discoverable through interaction
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `js/models/Component.js` | Updated `ComponentDefaults` sizes for waveplate and filter |
+| `js/main.js` | Added drag state variables, `handlePaletteDrag()`, `handlePaletteDrop()`, `createDragPreview()`, `removeDragPreview()` |
+| `css/styles.css` | Added `.component-drag-preview` styling, `.over-canvas` state, grab/grabbing cursors, proportional icon sizes |
+| `js/state.js` | Bumped `APP_VERSION` to 1.1 |
+| `versionlog.txt` | Created version log for user-facing change tracking |
+| `claude.md` | Updated documentation to reflect V1.1 changes |
+
+### All Phase 6 Features Complete ✅
+
+| Feature | Status |
+|---------|--------|
+| Accurate waveplate/filter proportions | ✅ Implemented |
+| Proportional palette icons | ✅ All 7 components |
+| Drag from palette | ✅ 5px threshold |
+| Visual drag preview | ✅ Follows cursor |
+| Drop zone indication | ✅ Green border over canvas |
+| Grid snap preview | ✅ Shows coordinates |
+| Component placement | ✅ Auto-snaps to grid |
+| Version bump to 1.1 | ✅ Complete |
+| Version log created | ✅ versionlog.txt |

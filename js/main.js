@@ -43,6 +43,12 @@ class BeamPathOptimizerApp {
         this.previewSnapshot = null;
         this.isSplitScreenMode = false;
 
+        // Drag from palette state
+        this.isDraggingFromPalette = false;
+        this.dragComponentType = null;
+        this.dragPreviewElement = null;
+        this.paletteMouseStart = null;
+
         // Bind methods
         this.render = this.render.bind(this);
         this.handleMouseDown = this.handleMouseDown.bind(this);
@@ -97,12 +103,18 @@ class BeamPathOptimizerApp {
             });
         });
 
-        // Component buttons (drag-and-drop or click-to-place)
+        // Component buttons (drag-and-drop from palette)
         document.querySelectorAll('.component-btn[data-component]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.startPlacingComponent(btn.dataset.component);
+            btn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                this.paletteMouseStart = { x: e.clientX, y: e.clientY };
+                this.dragComponentType = btn.dataset.component;
             });
         });
+
+        // Document-level mouse handlers for palette drag
+        document.addEventListener('mousemove', (e) => this.handlePaletteDrag(e));
+        document.addEventListener('mouseup', (e) => this.handlePaletteDrop(e));
 
         // Toolbar buttons
         document.getElementById('btn-new')?.addEventListener('click', () => this.newDocument());
@@ -1424,18 +1436,27 @@ class BeamPathOptimizerApp {
         if (this.isSelectionBoxDragging) {
             const box = state.ui.selectionBox;
             if (box) {
-                // In connect mode, select segments; otherwise select components
-                if (state.ui.tool === 'connect') {
-                    const selectedSegmentIds = this.getSegmentsInBox(box);
-                    if (selectedSegmentIds.length > 0) {
-                        this.store.dispatch(actions.selectMultipleSegments(selectedSegmentIds));
-                    }
-                } else {
-                    const selectedIds = this.getComponentsInBox(box);
-                    if (selectedIds.length > 0) {
-                        this.store.dispatch(actions.selectMultiple(selectedIds));
+                // Calculate box size to distinguish between click and drag
+                const boxWidth = Math.abs(box.endX - box.startX);
+                const boxHeight = Math.abs(box.endY - box.startY);
+                const isClick = boxWidth < 5 && boxHeight < 5; // Less than 5mm = click, not drag
+
+                // Only select components if user actually dragged (not just clicked)
+                if (!isClick) {
+                    // In connect mode, select segments; otherwise select components
+                    if (state.ui.tool === 'connect') {
+                        const selectedSegmentIds = this.getSegmentsInBox(box);
+                        if (selectedSegmentIds.length > 0) {
+                            this.store.dispatch(actions.selectMultipleSegments(selectedSegmentIds));
+                        }
+                    } else {
+                        const selectedIds = this.getComponentsInBox(box);
+                        if (selectedIds.length > 0) {
+                            this.store.dispatch(actions.selectMultiple(selectedIds));
+                        }
                     }
                 }
+                // If it was just a click (isClick = true), selection was already cleared in mouseDown
             }
             // Clear selection box
             this.isSelectionBoxDragging = false;
@@ -1892,6 +1913,99 @@ class BeamPathOptimizerApp {
         setTimeout(() => {
             toast.style.opacity = '0';
         }, 4000);
+    }
+
+    /**
+     * Handle dragging a component from the palette
+     */
+    handlePaletteDrag(e) {
+        if (!this.dragComponentType || !this.paletteMouseStart) return;
+
+        // Check if we've moved enough to start dragging (5px threshold)
+        const dx = e.clientX - this.paletteMouseStart.x;
+        const dy = e.clientY - this.paletteMouseStart.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (!this.isDraggingFromPalette && distance > 5) {
+            // Start dragging - create preview element
+            this.isDraggingFromPalette = true;
+            this.createDragPreview(this.dragComponentType);
+        }
+
+        if (this.isDraggingFromPalette && this.dragPreviewElement) {
+            // Update preview position
+            this.dragPreviewElement.style.left = `${e.clientX}px`;
+            this.dragPreviewElement.style.top = `${e.clientY}px`;
+
+            // Check if over canvas and show snapped position
+            const rect = this.canvas.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right &&
+                e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                const state = this.store.getState();
+                const screenX = e.clientX - rect.left;
+                const screenY = e.clientY - rect.top;
+                const worldPos = this.renderer.screenToWorld(screenX, screenY, state.ui.viewport);
+                const snappedPos = BeamPhysics.snapToGrid(worldPos, 25);
+
+                // Update preview to show snapped position hint
+                this.dragPreviewElement.classList.add('over-canvas');
+                this.dragPreviewElement.dataset.snapped = `(${snappedPos.x}, ${snappedPos.y})`;
+            } else {
+                this.dragPreviewElement.classList.remove('over-canvas');
+            }
+        }
+    }
+
+    /**
+     * Handle dropping a component from the palette
+     */
+    handlePaletteDrop(e) {
+        if (this.isDraggingFromPalette && this.dragComponentType) {
+            // Check if dropped on canvas
+            const rect = this.canvas.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right &&
+                e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                const state = this.store.getState();
+                const screenX = e.clientX - rect.left;
+                const screenY = e.clientY - rect.top;
+                const worldPos = this.renderer.screenToWorld(screenX, screenY, state.ui.viewport);
+                const snappedPos = BeamPhysics.snapToGrid(worldPos, 25);
+
+                this.placeComponent(this.dragComponentType, snappedPos);
+            }
+        }
+
+        // Clean up
+        this.removeDragPreview();
+        this.isDraggingFromPalette = false;
+        this.dragComponentType = null;
+        this.paletteMouseStart = null;
+    }
+
+    /**
+     * Create a visual preview element for dragging
+     */
+    createDragPreview(componentType) {
+        this.removeDragPreview(); // Clean up any existing preview
+
+        const preview = document.createElement('div');
+        preview.className = 'component-drag-preview';
+        preview.innerHTML = `
+            <span class="comp-icon ${componentType}"></span>
+            <span class="comp-name">${ComponentNames[componentType] || componentType}</span>
+        `;
+        document.body.appendChild(preview);
+        this.dragPreviewElement = preview;
+    }
+
+    /**
+     * Remove the drag preview element
+     */
+    removeDragPreview() {
+        if (this.dragPreviewElement) {
+            this.dragPreviewElement.remove();
+            this.dragPreviewElement = null;
+        }
     }
 
     /**
