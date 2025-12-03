@@ -31,13 +31,13 @@ export const VALID_ANGLES = {
 
 /**
  * Default angles per component type
- * - Mirrors and beam splitters default to 45 degrees
+ * - Mirrors default to 45 degrees
  * - All other components default to 0 degrees
  */
 export const DEFAULT_ANGLES = {
     [ComponentType.SOURCE]: 0,
     [ComponentType.MIRROR]: 45,
-    [ComponentType.BEAM_SPLITTER]: 45,
+    [ComponentType.BEAM_SPLITTER]: 0,
     [ComponentType.LENS]: 0,
     [ComponentType.WAVEPLATE]: 0,
     [ComponentType.FILTER]: 0,
@@ -178,8 +178,10 @@ export class Component {
 
         // === NEW: Beam Physics Properties ===
 
-        // Emission angle for sources (cardinal directions: 0, 90, 180, 270)
-        this.emissionAngle = props.emissionAngle ?? 0;
+        // Emission angle for sources - always equals the component angle
+        // (The beam travels out of the pointed end of the source)
+        // Note: We keep this property for backward compatibility with saved files,
+        // but it's now automatically determined by the component's angle
 
         // Shallow angle mode for beam splitters
         this.isShallowAngle = props.isShallowAngle || false;
@@ -190,6 +192,11 @@ export class Component {
 
         // Allow any angle override (bypasses angle constraints for this component)
         this.allowAnyAngle = props.allowAnyAngle ?? false;
+
+        // Label display properties
+        this.labelPosition = props.labelPosition || 'auto'; // 'auto', 'top', 'bottom', 'left', 'right'
+        this.labelVisible = props.labelVisible ?? true;
+        this.labelBackgroundColor = props.labelBackgroundColor || 'auto'; // 'auto' or custom color
 
         // Fixed path length constraints (for lenses and beam splitter reflected outputs)
         this.pathConstraints = props.pathConstraints
@@ -205,6 +212,17 @@ export class Component {
         this.notes = props.notes || '';
         this.createdAt = props.createdAt || new Date().toISOString();
         this.modifiedAt = props.modifiedAt || new Date().toISOString();
+    }
+
+    /**
+     * Get emission angle (for sources) - automatically determined by component orientation
+     * The beam always travels out of the pointed end of the source
+     */
+    get emissionAngle() {
+        if (this.type === ComponentType.SOURCE) {
+            return this.angle;
+        }
+        return 0;
     }
 
     /**
@@ -547,7 +565,7 @@ export class Component {
     update(props) {
         const updatableProps = ['name', 'position', 'angle', 'size', 'mass',
                                 'reflectance', 'transmittance', 'isFixed', 'isAngleFixed', 'notes', 'mountZone',
-                                'emissionAngle', 'isShallowAngle', 'shallowAngle', 'snapToGrid',
+                                'isShallowAngle', 'shallowAngle', 'snapToGrid',
                                 'allowAnyAngle', 'pathConstraints'];
 
         for (const key of updatableProps) {
@@ -601,6 +619,9 @@ export class Component {
             snapToGrid: this.snapToGrid,
             allowAnyAngle: this.allowAnyAngle,
             pathConstraints: { ...this.pathConstraints },
+            labelPosition: this.labelPosition,
+            labelVisible: this.labelVisible,
+            labelBackgroundColor: this.labelBackgroundColor,
             notes: this.notes,
             createdAt: this.createdAt,
             modifiedAt: this.modifiedAt

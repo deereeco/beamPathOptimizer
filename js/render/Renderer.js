@@ -459,19 +459,15 @@ export class Renderer {
     /**
      * Draw a single component
      */
-    drawComponent(component, isSelected, isHovered, viewport) {
+    drawComponent(component, isSelected, isHovered, viewport, labelsVisible = true) {
         const ctx = this.ctx;
         const screen = this.worldToScreen(component.position.x, component.position.y, viewport);
 
         ctx.save();
         ctx.translate(screen.x, screen.y);
 
-        // For sources, rotate based on emissionAngle so the pointy end matches emission direction
-        // For other components, use the regular angle
-        const rotationAngle = component.type === ComponentType.SOURCE
-            ? (component.emissionAngle || 0)
-            : component.angle;
-        ctx.rotate((rotationAngle * Math.PI) / 180);
+        // Rotate component based on its angle property (applies to all components including sources)
+        ctx.rotate((component.angle * Math.PI) / 180);
 
         const halfW = (component.size.width * viewport.zoom) / 2;
         const halfH = (component.size.height * viewport.zoom) / 2;
@@ -514,7 +510,30 @@ export class Renderer {
 
         ctx.restore();
 
-        // Draw label with background for visibility on any background
+        // Draw label with smart positioning (pass background for contrast calculation)
+        this.drawComponentLabel(ctx, component, screen, halfW, halfH, labelsVisible, this.currentBackground);
+
+        // Draw fixed indicator
+        if (component.isFixed) {
+            ctx.fillStyle = '#f59e0b';
+            ctx.font = '10px sans-serif';
+            ctx.fillText('🔒', screen.x + halfW + 5, screen.y - halfH);
+        }
+    }
+
+    /**
+     * Draw component label with smart positioning
+     */
+    drawComponentLabel(ctx, component, screen, halfW, halfH, labelsVisible, background) {
+        // Check if labels should be shown
+        if (!labelsVisible || !component.labelVisible) {
+            return;
+        }
+
+        // Calculate label position based on labelPosition setting
+        const labelPos = this.calculateLabelPosition(component, screen, halfW, halfH);
+
+        // Draw label with background for visibility
         ctx.font = '11px sans-serif';
         ctx.textAlign = 'center';
         const labelText = component.name;
@@ -522,27 +541,135 @@ export class Renderer {
         const textWidth = textMetrics.width;
         const textHeight = 11; // font size
         const padding = 4;
-        const labelX = screen.x;
-        const labelY = screen.y + halfH + 14;
 
-        // Draw semi-transparent background rectangle
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        // Determine label colors based on background
+        const labelColors = this.calculateLabelColors(component, background);
+
+        // Draw background rectangle
+        ctx.fillStyle = labelColors.background;
         ctx.fillRect(
-            labelX - textWidth / 2 - padding,
-            labelY - textHeight + 2,
+            labelPos.x - textWidth / 2 - padding,
+            labelPos.y - textHeight + 2,
             textWidth + padding * 2,
             textHeight + padding
         );
 
-        // Draw white text on top
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(labelText, labelX, labelY);
+        // Draw text
+        ctx.fillStyle = labelColors.text;
+        ctx.fillText(labelText, labelPos.x, labelPos.y);
+    }
 
-        // Draw fixed indicator
-        if (component.isFixed) {
-            ctx.fillStyle = '#f59e0b';
-            ctx.font = '10px sans-serif';
-            ctx.fillText('🔒', screen.x + halfW + 5, screen.y - halfH);
+    /**
+     * Calculate label colors that contrast with workspace background
+     */
+    calculateLabelColors(component, background) {
+        // If component has custom label background color, use it
+        if (component.labelBackgroundColor && component.labelBackgroundColor !== 'auto') {
+            const bgColor = component.labelBackgroundColor;
+            const isDark = this.isColorDark(bgColor);
+            return {
+                background: bgColor,
+                text: isDark ? '#ffffff' : '#000000'
+            };
+        }
+
+        // Auto mode: contrast with workspace background
+        const workspaceBgColor = background?.color || '#0d1117';
+        const isWorkspaceDark = this.isColorDark(workspaceBgColor);
+
+        if (isWorkspaceDark) {
+            // Dark workspace: light label background, dark text
+            return {
+                background: 'rgba(255, 255, 255, 0.9)',
+                text: workspaceBgColor
+            };
+        } else {
+            // Light workspace: dark label background, light text
+            return {
+                background: 'rgba(0, 0, 0, 0.8)',
+                text: workspaceBgColor
+            };
+        }
+    }
+
+    /**
+     * Determine if a color is dark or light based on luminance
+     */
+    isColorDark(color) {
+        // Parse color (handle hex, rgb, rgba)
+        let r, g, b;
+
+        if (color.startsWith('#')) {
+            // Hex color
+            const hex = color.replace('#', '');
+            if (hex.length === 3) {
+                r = parseInt(hex[0] + hex[0], 16);
+                g = parseInt(hex[1] + hex[1], 16);
+                b = parseInt(hex[2] + hex[2], 16);
+            } else {
+                r = parseInt(hex.substr(0, 2), 16);
+                g = parseInt(hex.substr(2, 2), 16);
+                b = parseInt(hex.substr(4, 2), 16);
+            }
+        } else if (color.startsWith('rgb')) {
+            // RGB or RGBA
+            const matches = color.match(/\d+/g);
+            if (matches && matches.length >= 3) {
+                r = parseInt(matches[0]);
+                g = parseInt(matches[1]);
+                b = parseInt(matches[2]);
+            }
+        } else {
+            // Default to dark if we can't parse
+            return true;
+        }
+
+        // Calculate relative luminance (ITU-R BT.709)
+        const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+
+        // Threshold of 0.5 (darker than 50% is considered dark)
+        return luminance < 0.5;
+    }
+
+    /**
+     * Calculate label position based on component angle and labelPosition setting
+     * For 'auto' mode, label is placed on the "short end" of the component
+     */
+    calculateLabelPosition(component, screen, halfW, halfH) {
+        const offset = 14; // Distance from component edge
+        let position = component.labelPosition || 'auto';
+
+        // For 'auto' mode, determine best position based on component angle
+        if (position === 'auto') {
+            // Normalize angle to 0-360
+            const angle = ((component.angle % 360) + 360) % 360;
+
+            // Determine if component is more horizontal or vertical
+            // For components at 0° or 180°, label should be top/bottom (perpendicular to long axis)
+            // For components at 90° or 270°, label should be left/right
+            if (angle >= 315 || angle < 45) {
+                position = 'bottom'; // 0° - horizontal component, label below
+            } else if (angle >= 45 && angle < 135) {
+                position = 'right'; // 90° - vertical component, label to right
+            } else if (angle >= 135 && angle < 225) {
+                position = 'top'; // 180° - horizontal component, label above
+            } else {
+                position = 'left'; // 270° - vertical component, label to left
+            }
+        }
+
+        // Calculate position based on direction
+        switch (position) {
+            case 'top':
+                return { x: screen.x, y: screen.y - halfH - offset };
+            case 'bottom':
+                return { x: screen.x, y: screen.y + halfH + offset };
+            case 'left':
+                return { x: screen.x - halfW - 20, y: screen.y + 4 };
+            case 'right':
+                return { x: screen.x + halfW + 20, y: screen.y + 4 };
+            default:
+                return { x: screen.x, y: screen.y + halfH + offset };
         }
     }
 
@@ -618,12 +745,23 @@ export class Renderer {
 
         beamPath.getAllSegments().forEach(segment => {
             const source = componentMap.get(segment.sourceId);
-            const target = componentMap.get(segment.targetId);
+            if (!source) return;
 
-            if (!source || !target) return;
+            // Determine end position: either target component or explicit endPoint
+            let endWorldPos;
+            if (segment.targetId) {
+                const target = componentMap.get(segment.targetId);
+                if (!target) return;
+                endWorldPos = target.position;
+            } else if (segment.endPoint) {
+                // Beam terminates at workspace boundary
+                endWorldPos = segment.endPoint;
+            } else {
+                return; // No valid endpoint
+            }
 
             const startScreen = this.worldToScreen(source.position.x, source.position.y, viewport);
-            const endScreen = this.worldToScreen(target.position.x, target.position.y, viewport);
+            const endScreen = this.worldToScreen(endWorldPos.x, endWorldPos.y, viewport);
 
             const isSelected = selectedSegmentIds.includes(segment.id);
             const isHovered = hoveredSegmentId === segment.id;
@@ -905,7 +1043,10 @@ export class Renderer {
      */
     render(state) {
         const { components, beamPath, constraints, calculated, ui, grid, background, wavelengths } = state;
-        const { viewport, selection, selectionBox } = ui;
+        const { viewport, selection, selectionBox, labelsVisible } = ui;
+
+        // Store background for label contrast calculation
+        this.currentBackground = background;
 
         // Update grid size from state if provided
         if (grid && grid.size) {
@@ -955,7 +1096,7 @@ export class Renderer {
         components.forEach(component => {
             const isSelected = selection.selectedIds.includes(component.id);
             const isHovered = selection.hoveredId === component.id;
-            this.drawComponent(component, isSelected, isHovered, viewport);
+            this.drawComponent(component, isSelected, isHovered, viewport, labelsVisible);
         });
 
         // Draw center of mass

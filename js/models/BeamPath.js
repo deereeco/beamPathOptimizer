@@ -5,9 +5,12 @@ export class BeamSegment {
     constructor(props) {
         this.id = props.id || `seg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         this.sourceId = props.sourceId;
-        this.targetId = props.targetId;
+        this.targetId = props.targetId || null; // Can be null if beam terminates at workspace boundary
         this.sourcePort = props.sourcePort || 'output'; // output, reflected, transmitted
         this.targetPort = props.targetPort || 'input';
+
+        // Optional endpoint for beams that terminate at workspace boundary
+        this.endPoint = props.endPoint || null; // { x, y } - used when targetId is null
 
         // Beam properties (can be inherited/calculated)
         this.wavelength = props.wavelength || 632.8; // nm (HeNe default)
@@ -82,6 +85,7 @@ export class BeamSegment {
             targetId: this.targetId,
             sourcePort: this.sourcePort,
             targetPort: this.targetPort,
+            endPoint: this.endPoint ? { ...this.endPoint } : null, // Workspace boundary endpoint
             wavelength: this.wavelength,
             power: this.power,
             pathLength: this.pathLength,

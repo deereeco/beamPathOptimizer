@@ -28,6 +28,7 @@ export const CARDINAL_ANGLES = [0, 90, 180, 270];
 /**
  * Valid angles per component type
  * - Mirrors: 45 or 135 degrees (reflects beam by 90 degrees)
+ * - Beam splitters: 0, 45, 90, 135, 180, 270 (can be oriented at various angles)
  * - Transmission components: 0, 90, 180, 270 (beam passes straight through)
  * - Sources: 0, 90, 180, 270 (emits in cardinal direction)
  * - Detectors: Any (accepts beam from any direction)
@@ -35,7 +36,7 @@ export const CARDINAL_ANGLES = [0, 90, 180, 270];
 export const VALID_ANGLES_BY_TYPE = {
     [ComponentType.SOURCE]: [0, 90, 180, 270],
     [ComponentType.MIRROR]: [45, 135],
-    [ComponentType.BEAM_SPLITTER]: [45, 135],  // Default, can be overridden for shallow angle
+    [ComponentType.BEAM_SPLITTER]: [0, 45, 90, 135, 180, 270],  // More flexible angles
     [ComponentType.LENS]: [0, 90, 180, 270],
     [ComponentType.WAVEPLATE]: [0, 90, 180, 270],
     [ComponentType.FILTER]: [0, 90, 180, 270],
@@ -314,19 +315,19 @@ export function isTargetOnBeamPath(sourcePos, targetPos, expectedAngle, toleranc
 
 /**
  * Check if a beam can hit a transmission component (lens, waveplate, filter)
- * Beam must pass through along the optical axis (parallel to component angle)
+ * Beam must pass through perpendicular to the component surface
  *
- * For a lens at angle 0° (standing vertical, thin horizontally):
- *   - Optical axis is horizontal (0°/180°)
- *   - Beam should come from left or right
- * For a lens at angle 90° (laying flat, thin vertically):
- *   - Optical axis is vertical (90°/270°)
+ * For a lens at angle 0° (width=20mm horizontal, height=5mm vertical, thin vertically):
+ *   - Optical axis is perpendicular to angle: 90°/270° (vertical)
  *   - Beam should come from top or bottom
+ * For a lens at angle 90° (rotated, thin horizontally):
+ *   - Optical axis is perpendicular to angle: 0°/180° (horizontal)
+ *   - Beam should come from left or right
  */
 export function canTransmissionComponentAccept(componentAngle, beamAngle, tolerance = ANGLE_TOLERANCE) {
-    // The optical axis is along the component angle (the thin dimension)
-    // Beam should be parallel to the optical axis (can come from either direction)
-    const opticalAxis = normalizeAngle(componentAngle);
+    // The optical axis is perpendicular to the component angle
+    // Light passes through the thin dimension (perpendicular to the surface)
+    const opticalAxis = normalizeAngle(componentAngle + 90);
 
     // Beam can come from either direction along the optical axis
     const diff1 = Math.abs(normalizeAngle(beamAngle - opticalAxis));
@@ -387,7 +388,11 @@ export function validateConnection(sourceComp, targetComp, sourcePort, incomingB
     }
 
     // 2. Check if target is along the beam path (with appropriate tolerance)
-    if (!isTargetOnBeamPath(sourceComp.position, targetComp.position, outputAngle, tolerance)) {
+    // EXCEPTION: Mirrors and beam splitters can accept beams from ANY direction,
+    // so skip this check for them as targets
+    const targetIsMirrorOrBS = [ComponentType.MIRROR, ComponentType.BEAM_SPLITTER].includes(targetComp.type);
+
+    if (!targetIsMirrorOrBS && !isTargetOnBeamPath(sourceComp.position, targetComp.position, outputAngle, tolerance)) {
         // If source allows any angle, skip this check
         if (!sourceRelaxed) {
             const actualAngle = calculateBeamAngle(sourceComp.position, targetComp.position);

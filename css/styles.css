@@ -488,6 +488,11 @@ body.resizing-panel * {
     line-height: 1;
 }
 
+.canvas-floating-btn-left {
+    left: 16px;
+    right: auto;
+}
+
 #main-canvas {
     display: block;
     width: 100%;
@@ -1437,6 +1442,25 @@ input[type="checkbox"] {
     background: #dc2626;
 }
 
+/* ===== Beam Propagation Toggle ===== */
+.beam-propagation-toggle {
+    margin-top: 10px;
+    display: flex;
+    justify-content: center;
+}
+
+.beam-propagation-toggle .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.beam-propagation-toggle input[type="checkbox"] {
+    cursor: pointer;
+}
+
 /* ===== Wavelength Selector ===== */
 .wavelength-selector {
     margin-top: 10px;
@@ -1586,6 +1610,15 @@ input[type="checkbox"] {
 
 .add-wavelength-form input[type="color"] {
     width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.color-input {
+    width: 50px;
     height: 32px;
     padding: 0;
     border: 1px solid var(--border-color);

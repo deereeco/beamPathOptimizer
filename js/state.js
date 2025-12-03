@@ -88,6 +88,8 @@ export const ActionType = {
     SET_TOOL: 'SET_TOOL',
     SET_VIEWPORT: 'SET_VIEWPORT',
     SET_WORKSPACE_SIZE: 'SET_WORKSPACE_SIZE',
+    TOGGLE_LABELS: 'TOGGLE_LABELS',
+    TOGGLE_AUTO_PROPAGATE: 'TOGGLE_AUTO_PROPAGATE',
 
     // Grid actions
     SET_GRID_SETTINGS: 'SET_GRID_SETTINGS',
@@ -167,7 +169,9 @@ export function createInitialState() {
             },
             selectionBox: null,       // { startX, startY, endX, endY } for drag selection
             placingComponent: null, // Component type being placed
-            connectingFrom: null    // Source component/port for beam connection
+            connectingFrom: null,   // Source component/port for beam connection
+            labelsVisible: true,    // Global label visibility toggle
+            autoPropagate: false    // Automatically propagate beams to components they intersect
         },
 
         // Grid settings
@@ -733,6 +737,22 @@ export function reducer(state, action) {
             break;
         }
 
+        case ActionType.TOGGLE_LABELS: {
+            newState.ui = {
+                ...state.ui,
+                labelsVisible: !state.ui.labelsVisible
+            };
+            break;
+        }
+
+        case ActionType.TOGGLE_AUTO_PROPAGATE: {
+            newState.ui = {
+                ...state.ui,
+                autoPropagate: !state.ui.autoPropagate
+            };
+            break;
+        }
+
         // ===== Grid Actions =====
         case ActionType.SET_GRID_SETTINGS: {
             newState.grid = {
@@ -855,6 +875,8 @@ export const actions = {
     setTool: (tool) => ({ type: ActionType.SET_TOOL, tool }),
     setViewport: (viewport) => ({ type: ActionType.SET_VIEWPORT, viewport }),
     setWorkspaceSize: (width, height) => ({ type: ActionType.SET_WORKSPACE_SIZE, width, height }),
+    toggleLabels: () => ({ type: ActionType.TOGGLE_LABELS }),
+    toggleAutoPropagate: () => ({ type: ActionType.TOGGLE_AUTO_PROPAGATE }),
     setGridSettings: (settings) => ({ type: ActionType.SET_GRID_SETTINGS, settings }),
     setBackground: (background) => ({ type: ActionType.SET_BACKGROUND, background }),
 

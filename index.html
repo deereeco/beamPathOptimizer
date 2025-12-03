@@ -157,6 +157,12 @@
                             <span class="tool-label">Add Beams</span>
                         </button>
                     </div>
+                    <div class="beam-propagation-toggle">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="auto-propagate-beams">
+                            <span>Laser On</span>
+                        </label>
+                    </div>
                     <div class="wavelength-selector">
                         <label for="active-wavelength">Wavelength:</label>
                         <select id="active-wavelength"></select>
@@ -219,6 +225,9 @@
                 <button id="btn-grid-settings" class="canvas-floating-btn" title="Grid Settings">
                     <span class="icon">&#9638;</span>
                 </button>
+                <button id="btn-toggle-labels" class="canvas-floating-btn canvas-floating-btn-left" title="Toggle Labels">
+                    <span class="icon">L</span>
+                </button>
                 <canvas id="main-canvas"></canvas>
                 <div id="zoom-controls">
                     <button id="zoom-in" title="Zoom In (+)">+</button>
@@ -247,6 +256,29 @@
                         <div class="property-group">
                             <label class="property-label">Name</label>
                             <input type="text" id="prop-name" class="property-input">
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Label Position</label>
+                            <select id="prop-label-position" class="property-select">
+                                <option value="auto">Auto</option>
+                                <option value="top">Top</option>
+                                <option value="bottom">Bottom</option>
+                                <option value="left">Left</option>
+                                <option value="right">Right</option>
+                            </select>
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Show Label</label>
+                            <input type="checkbox" id="prop-label-visible" checked>
+                            <span class="checkbox-hint">Display component name</span>
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Label Color</label>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <button id="btn-label-color-auto" class="action-btn small">Auto</button>
+                                <input type="color" id="prop-label-bg-color" class="color-input" value="#ffffff">
+                            </div>
+                            <span class="checkbox-hint">Custom label background (or Auto for contrast)</span>
                         </div>
                         <div class="property-group">
                             <div class="property-row">
@@ -315,18 +347,6 @@
                         </div>
 
                         <!-- === Beam Physics Properties === -->
-
-                        <!-- Source Emission Direction (only for sources) -->
-                        <div class="property-group" id="source-emission-group" style="display:none;">
-                            <label class="property-label">Emission Direction</label>
-                            <select id="prop-emission-angle" class="property-select">
-                                <option value="0">Right (0°)</option>
-                                <option value="90">Down (90°)</option>
-                                <option value="180">Left (180°)</option>
-                                <option value="270">Up (270°)</option>
-                            </select>
-                        </div>
-
                         <!-- Shallow Angle Mode (only for beam splitters) -->
                         <div class="property-group" id="shallow-angle-group" style="display:none;">
                             <label class="property-label">Shallow Angle Mode</label>

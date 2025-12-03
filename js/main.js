@@ -143,6 +143,23 @@ class BeamPathOptimizerApp {
         // Grid controls
         this.setupGridControls();
 
+        // Label visibility toggle
+        document.getElementById('btn-toggle-labels')?.addEventListener('click', () => {
+            this.store.dispatch(actions.toggleLabels());
+        });
+
+        // Laser On toggle
+        document.getElementById('auto-propagate-beams')?.addEventListener('change', (e) => {
+            this.store.dispatch(actions.toggleAutoPropagate());
+            if (e.target.checked) {
+                // Turning laser on - propagate all beams from sources
+                this.propagateAllBeams();
+            } else {
+                // Turning laser off - remove all beams
+                this.clearAllBeams();
+            }
+        });
+
         // Panel resize handle
         this.setupPanelResize();
 
@@ -178,6 +195,8 @@ class BeamPathOptimizerApp {
     setupPropertyInputs() {
         const inputs = {
             'prop-name': 'name',
+            'prop-label-position': 'labelPosition',
+            'prop-label-visible': 'labelVisible',
             'prop-x': 'position.x',
             'prop-y': 'position.y',
             'prop-angle': 'angle',
@@ -248,6 +267,53 @@ class BeamPathOptimizerApp {
                 });
             }
         });
+
+        // Label position and visibility controls (explicit handlers)
+        const labelPositionSelect = document.getElementById('prop-label-position');
+        if (labelPositionSelect) {
+            labelPositionSelect.addEventListener('change', (e) => {
+                const state = this.store.getState();
+                const selectedId = state.ui.selection.selectedIds[0];
+                if (selectedId) {
+                    this.store.dispatch(actions.updateComponent(selectedId, { labelPosition: e.target.value }));
+                }
+            });
+        }
+
+        const labelVisibleCheckbox = document.getElementById('prop-label-visible');
+        if (labelVisibleCheckbox) {
+            labelVisibleCheckbox.addEventListener('change', (e) => {
+                const state = this.store.getState();
+                const selectedId = state.ui.selection.selectedIds[0];
+                if (selectedId) {
+                    this.store.dispatch(actions.updateComponent(selectedId, { labelVisible: e.target.checked }));
+                }
+            });
+        }
+
+        // Label background color
+        const labelBgColorInput = document.getElementById('prop-label-bg-color');
+        if (labelBgColorInput) {
+            labelBgColorInput.addEventListener('change', (e) => {
+                const state = this.store.getState();
+                const selectedId = state.ui.selection.selectedIds[0];
+                if (selectedId) {
+                    this.store.dispatch(actions.updateComponent(selectedId, { labelBackgroundColor: e.target.value }));
+                }
+            });
+        }
+
+        // Label color auto button
+        const labelColorAutoBtn = document.getElementById('btn-label-color-auto');
+        if (labelColorAutoBtn) {
+            labelColorAutoBtn.addEventListener('click', () => {
+                const state = this.store.getState();
+                const selectedId = state.ui.selection.selectedIds[0];
+                if (selectedId) {
+                    this.store.dispatch(actions.updateComponent(selectedId, { labelBackgroundColor: 'auto' }));
+                }
+            });
+        }
 
         // Reflectance slider
         const reflectanceSlider = document.getElementById('prop-reflectance-slider');
@@ -346,16 +412,6 @@ class BeamPathOptimizerApp {
      * Set up beam physics property controls
      */
     setupBeamPhysicsControls() {
-        // Source emission direction
-        document.getElementById('prop-emission-angle')?.addEventListener('change', (e) => {
-            const state = this.store.getState();
-            const selectedId = state.ui.selection.selectedIds[0];
-            if (!selectedId) return;
-
-            const emissionAngle = parseInt(e.target.value) || 0;
-            this.store.dispatch(actions.updateComponent(selectedId, { emissionAngle }));
-        });
-
         // Shallow angle mode toggle
         const shallowEnabledCheckbox = document.getElementById('prop-shallow-enabled');
         const shallowAngleControls = document.getElementById('shallow-angle-controls');
@@ -2037,6 +2093,9 @@ class BeamPathOptimizerApp {
                     this.render();
                     // Show warning
                     this.showMovementWarning(validation.error);
+                } else if (state.ui.autoPropagate) {
+                    // Valid movement and auto-propagate is on - update beam connections
+                    this.propagateAllBeams();
                 }
             }
             this.isDragging = false;
@@ -2412,6 +2471,9 @@ class BeamPathOptimizerApp {
                 const sourceComp = components.get(segment.sourceId);
                 if (!sourceComp) continue;
 
+                // Skip if source was also moved (relative position maintained)
+                if (originalPositions.has(segment.sourceId)) continue;
+
                 // Calculate new beam angle from source to target
                 const newAngle = BeamPhysics.calculateBeamAngle(sourceComp.position, comp.position);
                 if (newAngle === null) continue;
@@ -2637,6 +2699,12 @@ class BeamPathOptimizerApp {
         const component = Component.create(type, position);
         this.store.dispatch(actions.addComponent(component));
         this.setTool('select');
+
+        // Trigger beam propagation if enabled
+        const state = this.store.getState();
+        if (state.ui.autoPropagate) {
+            this.propagateAllBeams();
+        }
     }
 
     /**
@@ -2730,6 +2798,11 @@ class BeamPathOptimizerApp {
 
         this.store.dispatch(actions.addBeamSegment(segment));
         console.log(`Connected ${source.name} -> ${target.name} (angle: ${validation.beamAngle?.toFixed(1)}°)`);
+
+        // Trigger beam propagation from target if enabled
+        if (state.ui.autoPropagate) {
+            this.propagateAllBeams();
+        }
     }
 
     /**
@@ -3080,6 +3153,12 @@ class BeamPathOptimizerApp {
     updateUI() {
         const state = this.store.getState();
 
+        // Update auto-propagate checkbox
+        const autoPropagateCheckbox = document.getElementById('auto-propagate-beams');
+        if (autoPropagateCheckbox) {
+            autoPropagateCheckbox.checked = state.ui.autoPropagate;
+        }
+
         // Update status bar
         const com = state.calculated.centerOfMass;
         document.getElementById('com-position').textContent =
@@ -3145,6 +3224,16 @@ class BeamPathOptimizerApp {
             componentProps.classList.remove('hidden');
 
             document.getElementById('prop-name').value = component.name;
+            document.getElementById('prop-label-position').value = component.labelPosition || 'auto';
+            document.getElementById('prop-label-visible').checked = component.labelVisible ?? true;
+
+            // Label background color
+            const labelBgColor = component.labelBackgroundColor || 'auto';
+            const labelBgColorInput = document.getElementById('prop-label-bg-color');
+            if (labelBgColorInput && labelBgColor !== 'auto') {
+                labelBgColorInput.value = labelBgColor;
+            }
+
             document.getElementById('prop-type').textContent = ComponentNames[component.type] || component.type;
             document.getElementById('prop-x').value = component.position.x.toFixed(1);
             document.getElementById('prop-y').value = component.position.y.toFixed(1);
@@ -3189,15 +3278,6 @@ class BeamPathOptimizerApp {
             }
 
             // === Beam Physics Controls ===
-
-            // Source emission direction (only for sources)
-            const sourceEmissionGroup = document.getElementById('source-emission-group');
-            if (component.type === ComponentType.SOURCE) {
-                sourceEmissionGroup.style.display = 'block';
-                document.getElementById('prop-emission-angle').value = component.emissionAngle || 0;
-            } else {
-                sourceEmissionGroup.style.display = 'none';
-            }
 
             // Shallow angle mode (only for beam splitters)
             const shallowAngleGroup = document.getElementById('shallow-angle-group');
@@ -3413,6 +3493,282 @@ class BeamPathOptimizerApp {
         } else {
             // Normal rendering
             this.renderer.render(state);
+        }
+    }
+
+    /**
+     * Calculate where a ray intersects the workspace boundary
+     * @param {Object} origin - Ray origin position {x, y}
+     * @param {number} angle - Ray direction angle (degrees)
+     * @param {Object} workspace - Workspace bounds {width, height}
+     * @returns {Object} Intersection point {x, y}
+     */
+    findWorkspaceBoundaryIntersection(origin, angle, workspace) {
+        const rayDir = BeamPhysics.angleToVector(angle);
+
+        // Calculate intersections with all four workspace boundaries
+        const intersections = [];
+
+        // Right boundary (x = workspace.width)
+        if (rayDir.x > 0) {
+            const t = (workspace.width - origin.x) / rayDir.x;
+            const y = origin.y + t * rayDir.y;
+            if (y >= 0 && y <= workspace.height && t > 0) {
+                intersections.push({ x: workspace.width, y, distance: t });
+            }
+        }
+
+        // Left boundary (x = 0)
+        if (rayDir.x < 0) {
+            const t = (0 - origin.x) / rayDir.x;
+            const y = origin.y + t * rayDir.y;
+            if (y >= 0 && y <= workspace.height && t > 0) {
+                intersections.push({ x: 0, y, distance: t });
+            }
+        }
+
+        // Bottom boundary (y = workspace.height)
+        if (rayDir.y > 0) {
+            const t = (workspace.height - origin.y) / rayDir.y;
+            const x = origin.x + t * rayDir.x;
+            if (x >= 0 && x <= workspace.width && t > 0) {
+                intersections.push({ x, y: workspace.height, distance: t });
+            }
+        }
+
+        // Top boundary (y = 0)
+        if (rayDir.y < 0) {
+            const t = (0 - origin.y) / rayDir.y;
+            const x = origin.x + t * rayDir.x;
+            if (x >= 0 && x <= workspace.width && t > 0) {
+                intersections.push({ x, y: 0, distance: t });
+            }
+        }
+
+        // Return the closest intersection
+        if (intersections.length === 0) {
+            // Shouldn't happen, but return a far point in the ray direction
+            return {
+                x: origin.x + rayDir.x * 1000,
+                y: origin.y + rayDir.y * 1000
+            };
+        }
+
+        intersections.sort((a, b) => a.distance - b.distance);
+        return { x: intersections[0].x, y: intersections[0].y };
+    }
+
+    /**
+     * Find the first component that a ray intersects
+     * @param {Object} origin - Ray origin position {x, y}
+     * @param {number} angle - Ray direction angle (degrees)
+     * @param {string} excludeId - Component ID to exclude from search
+     * @param {number} maxDistance - Maximum ray distance (workspace bounds)
+     * @returns {Object|null} {component, distance} or null if no intersection
+     */
+    findRayComponentIntersection(origin, angle, excludeId, maxDistance) {
+        const state = this.store.getState();
+        const rayDir = BeamPhysics.angleToVector(angle);
+
+        let closestComponent = null;
+        let closestDistance = maxDistance;
+
+        // Check each component for intersection
+        for (const [id, component] of state.components) {
+            if (id === excludeId) continue;
+
+            // Calculate component bounds (axis-aligned bounding box)
+            const hw = component.size.width / 2;
+            const hh = component.size.height / 2;
+            const cx = component.position.x;
+            const cy = component.position.y;
+
+            // Use a simple line-rectangle intersection test
+            // We'll use a rotated rectangle if needed, but for simplicity start with AABB
+            const bounds = {
+                minX: cx - hw,
+                maxX: cx + hw,
+                minY: cy - hh,
+                maxY: cy + hh
+            };
+
+            // Ray-AABB intersection test
+            const tMinX = (bounds.minX - origin.x) / rayDir.x;
+            const tMaxX = (bounds.maxX - origin.x) / rayDir.x;
+            const tMinY = (bounds.minY - origin.y) / rayDir.y;
+            const tMaxY = (bounds.maxY - origin.y) / rayDir.y;
+
+            const tMin = Math.max(
+                Math.min(tMinX, tMaxX),
+                Math.min(tMinY, tMaxY)
+            );
+            const tMax = Math.min(
+                Math.max(tMinX, tMaxX),
+                Math.max(tMinY, tMaxY)
+            );
+
+            // Check if ray intersects and is in front of origin
+            if (tMax >= tMin && tMax > 0 && tMin < closestDistance) {
+                const distance = tMin > 0 ? tMin : tMax;
+                if (distance < closestDistance && distance > 1) { // Minimum distance of 1mm
+                    closestDistance = distance;
+                    closestComponent = component;
+                }
+            }
+        }
+
+        return closestComponent ? { component: closestComponent, distance: closestDistance } : null;
+    }
+
+    /**
+     * Clear all beam segments (when laser is turned off)
+     */
+    clearAllBeams() {
+        const state = this.store.getState();
+        const allSegmentIds = Array.from(state.beamPath.segments.keys());
+
+        // Delete all segments
+        for (const segmentId of allSegmentIds) {
+            this.store.dispatch(actions.deleteBeamSegment(segmentId));
+        }
+
+        console.log('Cleared all beams (laser off)');
+    }
+
+    /**
+     * Propagate all beams automatically from all components
+     */
+    propagateAllBeams() {
+        const state = this.store.getState();
+        const processed = new Set(); // Track processed outputs to avoid duplicates
+
+        // Find all source components and start propagation from them
+        for (const [id, component] of state.components) {
+            if (component.type === ComponentType.SOURCE) {
+                this.propagateBeamFrom(component.id, null, processed);
+            }
+        }
+    }
+
+    /**
+     * Propagate beam from a specific component
+     * @param {string} componentId - Starting component ID
+     * @param {number|null} incomingAngle - Incoming beam angle (null for sources)
+     * @param {Set} processed - Set of processed component:port pairs
+     */
+    propagateBeamFrom(componentId, incomingAngle, processed) {
+        // Get output ports for this component
+        let component = this.store.getState().components.get(componentId);
+        if (!component) return;
+
+        const outputPorts = component.type === ComponentType.BEAM_SPLITTER
+            ? ['reflected', 'transmitted']
+            : component.canOutputBeam() ? ['output'] : [];
+
+        for (const sourcePort of outputPorts) {
+            // Get fresh state for each port iteration
+            const state = this.store.getState();
+            component = state.components.get(componentId);
+            if (!component) continue;
+
+            const portKey = `${componentId}:${sourcePort}`;
+
+            // Skip if already processed
+            if (processed.has(portKey)) continue;
+            processed.add(portKey);
+
+            // Check if segment already exists for this output
+            const existingSegments = state.beamPath.getOutgoingSegments(componentId);
+            const hasSegmentForPort = existingSegments.some(seg => seg.sourcePort === sourcePort);
+            if (hasSegmentForPort) {
+                // Continue propagation from existing target
+                const existingSegment = existingSegments.find(seg => seg.sourcePort === sourcePort);
+                const targetComp = state.components.get(existingSegment.targetId);
+                if (targetComp && targetComp.canOutputBeam()) {
+                    const beamAngle = BeamPhysics.calculateBeamAngle(component.position, targetComp.position);
+                    this.propagateBeamFrom(targetComp.id, beamAngle, processed);
+                }
+                continue;
+            }
+
+            // Calculate output direction
+            const outputAngle = BeamPhysics.getOutputDirection(component, incomingAngle, sourcePort);
+            if (outputAngle === null) continue;
+
+            // Find max distance to workspace boundary
+            const workspace = state.constraints.workspace;
+            const maxDist = Math.max(workspace.width, workspace.height) * 2;
+
+            // Find first component in beam path
+            const intersection = this.findRayComponentIntersection(
+                component.position,
+                outputAngle,
+                componentId,
+                maxDist
+            );
+
+            let segmentCreated = false;
+
+            if (intersection) {
+                const targetComponent = intersection.component;
+
+                // Validate connection using physics
+                const validation = BeamPhysics.validateConnection(
+                    component,
+                    targetComponent,
+                    sourcePort,
+                    incomingAngle,
+                    state.components
+                );
+
+                if (validation.valid) {
+                    // Create segment to the component
+                    const segment = new BeamSegment({
+                        sourceId: component.id,
+                        targetId: targetComponent.id,
+                        sourcePort,
+                        targetPort: 'input',
+                        direction: validation.beamDirection,
+                        directionAngle: validation.beamAngle,
+                        isValid: true,
+                        wavelengthIds: state.activeWavelengthId ? [state.activeWavelengthId] : []
+                    });
+
+                    this.store.dispatch(actions.addBeamSegment(segment));
+                    console.log(`Laser beam: ${component.name} -> ${targetComponent.name}`);
+                    segmentCreated = true;
+
+                    // Continue propagation if target is NOT a detector
+                    if (targetComponent.type !== ComponentType.DETECTOR && targetComponent.canOutputBeam()) {
+                        this.propagateBeamFrom(targetComponent.id, validation.beamAngle, processed);
+                    }
+                }
+            }
+
+            // If no valid component hit, create beam to workspace boundary
+            if (!segmentCreated) {
+                const boundaryPoint = this.findWorkspaceBoundaryIntersection(
+                    component.position,
+                    outputAngle,
+                    state.constraints.workspace
+                );
+
+                const beamDir = BeamPhysics.angleToVector(outputAngle);
+                const segment = new BeamSegment({
+                    sourceId: component.id,
+                    targetId: null, // No target component
+                    endPoint: boundaryPoint, // Explicit endpoint
+                    sourcePort,
+                    targetPort: 'boundary',
+                    direction: beamDir,
+                    directionAngle: outputAngle,
+                    isValid: true,
+                    wavelengthIds: state.activeWavelengthId ? [state.activeWavelengthId] : []
+                });
+
+                this.store.dispatch(actions.addBeamSegment(segment));
+                console.log(`Laser beam: ${component.name} -> workspace boundary`);
+            }
         }
     }
 }
