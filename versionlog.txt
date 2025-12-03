@@ -1,6 +1,66 @@
 BEAM PATH OPTIMIZER - VERSION LOG
 ================================================================================
 
+Version 1.4 (2025-12-03)
+--------------------------------------------------------------------------------
+Bug Fixes:
+
+  • Fixed Source Component Emission Direction
+    - Removed manual emission direction control from properties panel
+    - Beam direction now automatically determined by component's rotation angle
+    - At 0°: beam travels right, 90°: down, 180°: left, 270°: up
+    - The pointed end of source shape always indicates beam direction
+    - Emission angle is now a computed getter property (returns component.angle)
+    - More intuitive behavior - rotating the source rotates the beam
+
+  • Fixed Beam Path Recalculation on Component Movement/Rotation
+    - Beam segments now properly update when source components move or rotate
+    - Added recalculateBeamSegmentsFromComponent() function in state reducer
+    - Recalculates endpoint positions for beams going to workspace boundary
+    - Triggered automatically on UPDATE_COMPONENT and MOVE_COMPONENT actions
+    - Beams now translate with component (no unwanted rotation)
+    - Beams now rotate correctly when component angle changes
+
+  • Fixed Version Migration Dialog Issues (3 fixes)
+    - Cancel button now properly stops file loading (doesn't load file)
+    - Added two-step dialog: "Upgrade" → "Use old version" → "Cancel"
+    - Added explicit option to load old file version without upgrading
+    - Backup file automatically created with version suffix (e.g., "filename-V1.1.json")
+    - Clear messaging about what each option does
+
+  • Fixed Opacity Error When Loading Old Files
+    - Added comprehensive state initialization for missing properties
+    - Now properly loads: background, grid, wavelengths, UI settings
+    - Prevents "Cannot read properties of undefined (reading 'opacity')" error
+    - All state properties have proper defaults when loading legacy files
+
+  • Fixed Version Format Consistency
+    - Removed trailing ".0" from file version format
+    - toFileFormat() now returns "1.4" instead of "1.4.0"
+    - Display format consistent with file format (both show V1.4)
+    - Removed need for regex stripping in display code
+    - Backward compatible with old "1.x.0" format files
+
+Technical Changes:
+
+  • Version bumped to 1.4
+  • Imported BeamPhysics and BeamSegment into state.js
+  • Added helper functions: recalculateBeamSegmentsFromComponent(),
+    findWorkspaceBoundaryIntersection(), lineIntersection()
+  • Removed emissionAngle from Component.update() updatable properties
+  • Converted emissionAngle to getter property in Component class
+  • Enhanced saveDocument() to persist all state properties (grid, background, etc.)
+  • Enhanced openDocument() to merge loaded state with defaults
+  • Updated version migration workflow with better UX
+
+Files Modified:
+  • js/state.js - Version, beam recalculation functions, BeamPhysics import
+  • js/models/Component.js - emissionAngle getter, removed from constructor/update
+  • js/main.js - Version migration dialog, backup creation, state initialization
+  • index.html - Removed emission direction dropdown
+  • versionlog.txt - Added V1.4 changelog
+
+
 Version 1.3 (2025-12-03)
 --------------------------------------------------------------------------------
 Bug Fixes:

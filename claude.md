@@ -567,3 +567,85 @@ See: `Plans/V1.2-Features-Plan.md`
 ### All Phase 7 Features Complete ✅
 
 Version 1.2 released - see `versionlog.txt` for full changelog.
+
+---
+
+## Phase 8: Bug Fixes & Beam Physics - COMPLETED (V1.4)
+
+### Issue 1: Source Component Emission Direction
+
+**Problem**: Source components had a manual "Emission Direction" dropdown that was independent of the component's rotation. This was confusing because the source shape (with a pointed end) implied the beam should emit from that direction.
+
+**Solution**:
+- Removed emission direction UI control from properties panel
+- Converted `emissionAngle` to a computed getter property that returns `component.angle`
+- Beam now automatically follows the component's rotation:
+  - 0° → beam travels right
+  - 90° → beam travels down
+  - 180° → beam travels left
+  - 270° → beam travels up
+- The pointed end of the source shape always indicates beam direction
+
+### Issue 2: Beam Path Not Updating on Component Movement/Rotation
+
+**Problem**: When rotating or moving a source component, beam segments didn't update their geometry. Beams to workspace boundary stored fixed endpoints that became stale.
+
+**Solution**:
+- Created `recalculateBeamSegmentsFromComponent()` function in state reducer
+- Automatically triggered on `UPDATE_COMPONENT` and `MOVE_COMPONENT` actions
+- For segments with no target component (going to workspace boundary):
+  - Recalculates output angle based on component's new orientation
+  - Finds new intersection point with workspace boundary
+  - Updates segment's `endPoint`, `direction`, and `directionAngle`
+- Added helper functions: `findWorkspaceBoundaryIntersection()`, `lineIntersection()`
+
+### Issue 3: Version Migration Dialog Problems
+
+**Problem**: Three issues with the version migration prompt:
+1. Cancel button didn't stop file loading - file loaded anyway
+2. No option to use old file version without upgrading
+3. Error message about opacity when loading old files
+
+**Solution**:
+- **Two-step dialog workflow**:
+  1. First prompt: "Click OK to upgrade, or Cancel for more options"
+  2. If Cancel: Second prompt: "Click OK to load old version, or Cancel to abort"
+- Clicking Cancel twice now properly stops file loading
+- Backup file automatically downloaded with version suffix (e.g., `filename-V1.1.json`)
+- Enhanced state initialization when loading files:
+  - Added defaults for `background`, `grid`, `wavelengths`, `ui` properties
+  - Prevents "Cannot read properties of undefined (reading 'opacity')" error
+  - Backward compatible with V1.0-V1.3 files
+
+### Issue 4: Version Format Inconsistency
+
+**Problem**: `toFileFormat()` returned "1.3.0" with unnecessary trailing ".0", but display showed "V1.3". Required regex workaround.
+
+**Solution**:
+- Changed `toFileFormat()` to return `${major}.${minor}` instead of `${major}.${minor}.0`
+- Consistent format everywhere: files save as "1.4", display shows "V1.4"
+- `compareVersions()` still handles both formats for backward compatibility
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `js/state.js` | Version to 1.4, imported BeamPhysics/BeamSegment, added beam recalculation functions |
+| `js/models/Component.js` | Converted emissionAngle to getter, removed from constructor/update |
+| `js/main.js` | Enhanced version migration dialog, backup creation, state initialization on load, save all state properties |
+| `index.html` | Removed emission direction dropdown from properties panel |
+| `versionlog.txt` | Added V1.4 changelog |
+| `claude.md` | Added Phase 8 documentation |
+
+### All Phase 8 Features Complete ✅
+
+| Fix | Status |
+|-----|--------|
+| Source emission auto-follows rotation | ✅ Completed |
+| Beam segments recalculate on move/rotate | ✅ Completed |
+| Cancel button stops file loading | ✅ Completed |
+| Option to use old file version | ✅ Completed |
+| Opacity error fixed | ✅ Completed |
+| Version format consistency | ✅ Completed |
+
+Version 1.4 released - see `versionlog.txt` for full changelog.

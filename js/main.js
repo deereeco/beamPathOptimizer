@@ -3022,18 +3022,56 @@ class BeamPathOptimizerApp {
                 const currentVersion = APP_VERSION.toFileFormat();
                 const fileVersion = json.formatVersion;
 
+                let shouldLoad = true;
+
                 if (needsMigration(fileVersion, currentVersion)) {
-                    const shouldMigrate = confirm(
-                        `This file was created with an older version (${fileVersion}).\n\n` +
-                        `Current version: ${currentVersion}\n\n` +
-                        `Would you like to update it to the current format?\n` +
-                        `(Your original file will not be modified until you save)`
+                    // Format versions for display (e.g., "1.1.0" -> "V1.1")
+                    const formatVersionForDisplay = (v) => {
+                        const match = v.match(/(\d+)\.(\d+)/);
+                        return match ? `V${match[1]}.${match[2]}` : v;
+                    };
+
+                    const fileVersionDisplay = formatVersionForDisplay(fileVersion);
+                    const currentVersionDisplay = APP_VERSION.toString();
+
+                    // Ask if user wants to upgrade
+                    const shouldUpgrade = confirm(
+                        `This file was created with an older version (${fileVersionDisplay}).\n\n` +
+                        `Current version: ${currentVersionDisplay}\n\n` +
+                        `Would you like to update it to the current format?\n\n` +
+                        `Your original file will be saved and appended with "-${fileVersionDisplay}".\n` +
+                        `The updated version will have the original file name.\n\n` +
+                        `Click OK to upgrade, or Cancel for more options.`
                     );
 
-                    if (shouldMigrate) {
+                    if (shouldUpgrade) {
                         console.log(`Migrating file from ${fileVersion} to ${currentVersion}`);
+
+                        // Create backup of original file
+                        this.createBackupFile(file, fileVersionDisplay, text);
+
                         json.formatVersion = currentVersion;
+                    } else {
+                        // User clicked Cancel - ask if they want to use old version
+                        const useOldVersion = confirm(
+                            `Would you like to use the old file version (${fileVersionDisplay}) without upgrading?\n\n` +
+                            `Click OK to load the old version as-is.\n` +
+                            `Click Cancel to abort loading.`
+                        );
+
+                        if (useOldVersion) {
+                            console.log(`Loading file with old version ${fileVersion} without upgrading`);
+                        } else {
+                            console.log('File loading cancelled by user');
+                            shouldLoad = false;
+                        }
                     }
+                }
+
+                // Only continue loading if user didn't cancel
+                if (!shouldLoad) {
+                    input.value = '';
+                    return;
                 }
 
                 // Reconstruct components as a Map
@@ -3057,7 +3095,7 @@ class BeamPathOptimizerApp {
                     mountingZone: json.constraints?.mountingZone || null
                 };
 
-                // Build the new state
+                // Build the new state (merge with defaults for missing properties)
                 const newState = {
                     components,
                     beamPath,
@@ -3076,13 +3114,41 @@ class BeamPathOptimizerApp {
                             type: null,
                             selectedIds: [],
                             selectedZoneId: null,
+                            selectedSegmentIds: [],
                             hoveredId: null,
-                            hoveredZoneId: null
+                            hoveredZoneId: null,
+                            hoveredSegmentId: null
                         },
-                        selectionBox: null
+                        selectionBox: null,
+                        placingComponent: null,
+                        connectingFrom: null,
+                        labelsVisible: json.ui?.labelsVisible ?? true,
+                        autoPropagate: json.ui?.autoPropagate ?? false
                     },
+                    grid: json.grid || {
+                        enabled: true,
+                        visible: false,
+                        size: 25
+                    },
+                    background: json.background || {
+                        type: 'color',
+                        color: '#0d1117',
+                        imagePath: null,
+                        imageData: null,
+                        opacity: 100
+                    },
+                    wavelengths: json.wavelengths || [
+                        { id: 'w1', name: '633nm HeNe', color: '#ff0000', isPreset: true },
+                        { id: 'w2', name: '532nm Nd:YAG', color: '#00ff00', isPreset: true },
+                        { id: 'w3', name: '1064nm IR', color: '#ff00ff', isPreset: true },
+                        { id: 'w4', name: '405nm Violet', color: '#8800ff', isPreset: true },
+                        { id: 'w5', name: '780nm GaAs', color: '#cc0044', isPreset: true },
+                        { id: 'w6', name: '850nm VCSEL', color: '#990066', isPreset: true }
+                    ],
+                    activeWavelengthId: json.activeWavelengthId || 'w1',
                     calculated: {
                         centerOfMass: null,
+                        totalMass: 0,
                         isCoMInMountingZone: false,
                         constraintViolations: [],
                         totalPathLength: 0
@@ -3116,6 +3182,36 @@ class BeamPathOptimizerApp {
     }
 
     /**
+     * Create backup file with version suffix
+     * @param {File} originalFile - The original file object
+     * @param {string} versionDisplay - Version string for display (e.g., "V1.1")
+     * @param {string} fileContent - The file content to backup
+     */
+    createBackupFile(originalFile, versionDisplay, fileContent) {
+        // Extract filename without extension
+        const originalName = originalFile.name;
+        const lastDot = originalName.lastIndexOf('.');
+        const baseName = lastDot > 0 ? originalName.substring(0, lastDot) : originalName;
+        const extension = lastDot > 0 ? originalName.substring(lastDot) : '.json';
+
+        // Create backup filename with version suffix
+        const backupFileName = `${baseName}-${versionDisplay}${extension}`;
+
+        // Create blob and download link
+        const blob = new Blob([fileContent], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const a = window.document.createElement('a');
+        a.href = url;
+        a.download = backupFileName;
+        a.click();
+
+        URL.revokeObjectURL(url);
+
+        console.log(`Created backup: ${backupFileName}`);
+    }
+
+    /**
      * Save document (placeholder)
      */
     saveDocument() {
@@ -3131,7 +3227,21 @@ class BeamPathOptimizerApp {
             constraints: {
                 keepOutZones: state.constraints.keepOutZones,
                 mountingZone: state.constraints.mountingZone
-            }
+            },
+            ui: {
+                labelsVisible: state.ui.labelsVisible,
+                autoPropagate: state.ui.autoPropagate
+            },
+            grid: state.grid,
+            background: {
+                type: state.background.type,
+                color: state.background.color,
+                imagePath: state.background.imagePath,
+                opacity: state.background.opacity
+                // Note: imageData is runtime only, not saved
+            },
+            wavelengths: state.wavelengths,
+            activeWavelengthId: state.activeWavelengthId
         };
 
         const json = JSON.stringify(document, null, 2);

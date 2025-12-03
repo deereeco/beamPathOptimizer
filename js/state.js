@@ -3,7 +3,8 @@
  */
 
 import { Component, ComponentType } from './models/Component.js';
-import { BeamPath } from './models/BeamPath.js';
+import { BeamPath, BeamSegment } from './models/BeamPath.js';
+import * as BeamPhysics from './physics/BeamPhysics.js';
 
 /**
  * Application version
@@ -12,12 +13,12 @@ import { BeamPath } from './models/BeamPath.js';
  */
 export const APP_VERSION = {
     major: 1,
-    minor: 3,
+    minor: 4,
     toString() {
         return `V${this.major}.${this.minor}`;
     },
     toFileFormat() {
-        return `${this.major}.${this.minor}.0`;
+        return `${this.major}.${this.minor}`;
     }
 };
 
@@ -410,6 +411,118 @@ export function recalculateDerivedState(state) {
 }
 
 /**
+ * Recalculate geometry for beam segments originating from a component
+ * This updates segments that have explicit endpoints (go to workspace boundary)
+ * when the source component moves or rotates
+ */
+function recalculateBeamSegmentsFromComponent(componentId, component, beamPath, workspace, components) {
+    const segments = beamPath.getOutgoingSegments(componentId);
+    if (!segments || segments.length === 0) return beamPath;
+
+    // Create new BeamPath by cloning
+    const newBeamPath = new BeamPath();
+    newBeamPath.segments = new Map(beamPath.segments);
+    newBeamPath.outgoing = new Map(beamPath.outgoing);
+    newBeamPath.incoming = new Map(beamPath.incoming);
+
+    segments.forEach(segment => {
+        // Only recalculate segments that go to workspace boundary (no targetId)
+        if (segment.targetId) return;
+
+        // Find incoming beam angle (if this component receives a beam)
+        let incomingAngle = null;
+        const incomingSegments = beamPath.getIncomingSegments(componentId);
+        if (incomingSegments && incomingSegments.length > 0) {
+            const incomingSeg = incomingSegments[0];
+            const sourceComp = components.get(incomingSeg.sourceId);
+            if (sourceComp) {
+                incomingAngle = BeamPhysics.calculateBeamAngle(sourceComp.position, component.position);
+            }
+        }
+
+        // Calculate new output angle
+        const outputAngle = BeamPhysics.getOutputDirection(component, incomingAngle, segment.sourcePort);
+        if (outputAngle === null) return;
+
+        // Calculate new endpoint at workspace boundary
+        const boundaryPoint = findWorkspaceBoundaryIntersection(
+            component.position,
+            outputAngle,
+            workspace
+        );
+
+        // Update segment with new geometry
+        const segmentData = segment.toJSON();
+        segmentData.endPoint = boundaryPoint;
+        segmentData.direction = BeamPhysics.angleToVector(outputAngle);
+        segmentData.directionAngle = outputAngle;
+
+        const updatedSegment = BeamSegment.fromJSON(segmentData);
+        newBeamPath.segments.set(segment.id, updatedSegment);
+    });
+
+    return newBeamPath;
+}
+
+/**
+ * Find where a beam intersects the workspace boundary
+ */
+function findWorkspaceBoundaryIntersection(start, angle, workspace) {
+    const dir = BeamPhysics.angleToVector(angle);
+    const halfW = workspace.width / 2;
+    const halfH = workspace.height / 2;
+
+    // Workspace boundaries
+    const boundaries = [
+        { x1: -halfW, y1: -halfH, x2: halfW, y2: -halfH },  // Top
+        { x1: halfW, y1: -halfH, x2: halfW, y2: halfH },    // Right
+        { x1: halfW, y1: halfH, x2: -halfW, y2: halfH },    // Bottom
+        { x1: -halfW, y1: halfH, x2: -halfW, y2: -halfH }   // Left
+    ];
+
+    let closestPoint = null;
+    let closestDist = Infinity;
+
+    boundaries.forEach(boundary => {
+        const intersection = lineIntersection(
+            start.x, start.y,
+            start.x + dir.x * 10000, start.y + dir.y * 10000,
+            boundary.x1, boundary.y1, boundary.x2, boundary.y2
+        );
+
+        if (intersection) {
+            const dist = Math.hypot(intersection.x - start.x, intersection.y - start.y);
+            if (dist > 1 && dist < closestDist) {  // Must be at least 1mm away
+                closestDist = dist;
+                closestPoint = intersection;
+            }
+        }
+    });
+
+    return closestPoint || { x: start.x + dir.x * 1000, y: start.y + dir.y * 1000 };
+}
+
+/**
+ * Calculate line intersection point
+ */
+function lineIntersection(x1, y1, x2, y2, x3, y3, x4, y4) {
+    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (Math.abs(denom) < 1e-10) return null;
+
+    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        return {
+            x: x1 + t * (x2 - x1),
+            y: y1 + t * (y2 - y1)
+        };
+    }
+
+    return null;
+}
+
+/**
  * State reducer
  */
 export function reducer(state, action) {
@@ -443,6 +556,18 @@ export function reducer(state, action) {
             const updatedComponent = new Component(component.toJSON());
             updatedComponent.update(updates);
             newState.components.set(componentId, updatedComponent);
+
+            // Recalculate beam geometry if position or angle changed
+            if (updates.position !== undefined || updates.angle !== undefined) {
+                newState.beamPath = recalculateBeamSegmentsFromComponent(
+                    componentId,
+                    updatedComponent,
+                    state.beamPath,
+                    state.constraints.workspace,
+                    newState.components
+                );
+            }
+
             newState.document = { ...state.document, isDirty: true };
             break;
         }
@@ -456,6 +581,16 @@ export function reducer(state, action) {
             const movedComponent = new Component(component.toJSON());
             movedComponent.update({ position });
             newState.components.set(componentId, movedComponent);
+
+            // Recalculate beam geometry after move
+            newState.beamPath = recalculateBeamSegmentsFromComponent(
+                componentId,
+                movedComponent,
+                state.beamPath,
+                state.constraints.workspace,
+                newState.components
+            );
+
             newState.document = { ...state.document, isDirty: true };
             break;
         }
