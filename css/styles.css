@@ -222,15 +222,17 @@ input[type="text"]:focus {
 .panel-section {
     padding: 12px;
     border-bottom: 1px solid var(--border-color);
+    text-align: center;
 }
 
 .panel-section h3 {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--text-secondary);
     margin-bottom: 10px;
+    text-align: center;
 }
 
 /* ===== Tool Buttons ===== */
@@ -238,6 +240,7 @@ input[type="text"]:focus {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    align-items: center;
 }
 
 .tool-btn {
@@ -273,6 +276,7 @@ input[type="text"]:focus {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 6px;
+    justify-items: center;
 }
 
 .component-btn {
@@ -455,6 +459,35 @@ body.resizing-panel * {
     overflow: hidden;
 }
 
+.canvas-floating-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: var(--text-primary);
+    z-index: 10;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.canvas-floating-btn:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+.canvas-floating-btn .icon {
+    line-height: 1;
+}
+
 #main-canvas {
     display: block;
     width: 100%;
@@ -521,15 +554,37 @@ body.resizing-panel * {
 
 .property-group {
     margin-bottom: 12px;
-    text-align: center;
+    padding-left: 12px;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .property-label {
     display: block;
     font-size: 11px;
     color: var(--text-secondary);
-    margin-bottom: 4px;
-    text-align: center;
+    margin-bottom: 2px;
+    text-align: left;
+}
+
+.property-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.property-row .property-label {
+    flex: 0 0 auto;
+    margin-bottom: 0;
+}
+
+.property-row .property-value,
+.property-row .property-input {
+    flex: 1;
+    text-align: right;
 }
 
 .property-input {
@@ -549,13 +604,15 @@ body.resizing-panel * {
 .position-inputs,
 .size-inputs {
     display: flex;
-    gap: 8px;
-    justify-content: center;
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 12px;
 }
 
 .position-inputs label,
 .size-inputs label {
     display: flex;
+    justify-content: space-between;
     align-items: center;
     gap: 4px;
     font-size: 11px;
@@ -1245,6 +1302,11 @@ input[type="checkbox"] {
     flex-direction: column;
 }
 
+.modal-content.modal-small {
+    min-width: 320px;
+    max-width: 400px;
+}
+
 .modal-header {
     display: flex;
     justify-content: space-between;
@@ -1350,6 +1412,20 @@ input[type="checkbox"] {
     font-size: 11px;
     color: var(--text-muted);
     width: 100%;
+}
+
+.opacity-control {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-left: 24px;
+    margin-top: 8px;
+    width: calc(100% - 24px);
+}
+
+.opacity-control label {
+    font-size: 11px;
+    color: var(--text-secondary);
 }
 
 .action-btn.danger {
@@ -1460,6 +1536,36 @@ input[type="checkbox"] {
     color: white;
 }
 
+.wavelength-item .name {
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 2px 4px;
+    border-radius: 3px;
+    color: var(--text-primary);
+}
+
+.wavelength-item .name[readonly] {
+    cursor: default;
+}
+
+.wavelength-item .name:not([readonly]) {
+    background: var(--bg-secondary);
+    border-color: var(--accent);
+}
+
+.wavelength-item .color-picker {
+    width: 40px;
+    height: 24px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.add-wavelength-form {
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
 .add-wavelength-form {
     display: flex;
     gap: 8px;
@@ -1485,4 +1591,63 @@ input[type="checkbox"] {
     border: 1px solid var(--border-color);
     border-radius: 4px;
     cursor: pointer;
+}
+
+/* === Segment Wavelengths === */
+.segment-wavelengths-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    margin-bottom: 12px;
+}
+
+.segment-wavelength-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.segment-wavelength-item .swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    flex-shrink: 0;
+}
+
+.segment-wavelength-item .name {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-primary);
+}
+
+.segment-wavelength-item .remove-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 16px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.segment-wavelength-item .remove-btn:hover {
+    color: #ff4444;
+}
+
+.segment-wavelength-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.segment-wavelength-actions select {
+    flex: 1;
 }

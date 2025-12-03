@@ -12,7 +12,7 @@ import { BeamPath } from './models/BeamPath.js';
  */
 export const APP_VERSION = {
     major: 1,
-    minor: 2,
+    minor: 3,
     toString() {
         return `V${this.major}.${this.minor}`;
     },
@@ -173,6 +173,7 @@ export function createInitialState() {
         // Grid settings
         grid: {
             enabled: true,   // Global grid snapping on/off
+            visible: false,  // Show/hide grid lines visually
             size: 25         // Grid size in mm (1-50)
         },
 
@@ -181,7 +182,8 @@ export function createInitialState() {
             type: 'color',       // 'color' or 'image'
             color: '#0d1117',    // Default canvas-bg color
             imagePath: null,     // Path to image file (for save/load)
-            imageData: null      // Runtime only: loaded image data (not saved)
+            imageData: null,     // Runtime only: loaded image data (not saved)
+            opacity: 100         // Opacity for background image (0-100%)
         },
 
         // Wavelengths (beam colors)

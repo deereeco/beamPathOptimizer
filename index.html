@@ -64,9 +64,69 @@
                                 <button id="btn-choose-image" class="action-btn">Choose Image...</button>
                                 <span id="bg-image-name" class="hint">No image selected</span>
                             </div>
+                            <div class="opacity-control">
+                                <label for="bg-opacity">Opacity: <span id="bg-opacity-value">100</span>%</label>
+                                <input type="range" id="bg-opacity" min="0" max="100" value="100">
+                            </div>
                             <button id="btn-clear-image" class="action-btn danger hidden">Clear Image</button>
                         </div>
+                        <div class="settings-group">
+                            <button id="btn-reset-background" class="action-btn">Reset to Default</button>
+                        </div>
                     </section>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grid Settings Modal -->
+        <div id="grid-modal" class="modal hidden">
+            <div class="modal-content modal-small">
+                <div class="modal-header">
+                    <h2>Grid Settings</h2>
+                    <button id="close-grid-modal" class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="settings-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="grid-visible-modal">
+                            <span>Show Grid</span>
+                        </label>
+                    </div>
+                    <div class="settings-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="grid-enabled-modal" checked>
+                            <span>Enable Grid Snap</span>
+                        </label>
+                    </div>
+                    <div class="settings-group">
+                        <label for="grid-size-slider-modal">Grid Size: <span id="grid-size-value-modal">25</span>mm</label>
+                        <div class="grid-size-inputs">
+                            <input type="range" id="grid-size-slider-modal" min="1" max="50" value="25">
+                            <input type="number" id="grid-size-input-modal" min="1" max="50" value="25" class="property-input small">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wavelength Management Modal -->
+        <div id="wavelength-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Manage Wavelengths</h2>
+                    <button id="close-wavelength-modal" class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="wavelength-list" id="wavelength-list">
+                        <!-- Dynamically rendered wavelength items -->
+                    </div>
+                    <div class="add-wavelength-form">
+                        <input type="text" id="new-wavelength-name" placeholder="Wavelength name..." class="property-input">
+                        <div style="display: flex; gap: 8px; margin-top: 8px;">
+                            <input type="color" id="new-wavelength-color" value="#ff0000">
+                            <button id="btn-add-wavelength" class="action-btn">Add Wavelength</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -100,7 +160,7 @@
                     <div class="wavelength-selector">
                         <label for="active-wavelength">Wavelength:</label>
                         <select id="active-wavelength"></select>
-                        <button id="btn-manage-wavelengths" class="action-btn small" title="Manage Wavelengths">&#9881;</button>
+                        <button id="btn-manage-wavelengths" class="action-btn small" title="Manage Wavelengths">Manage Wavelengths</button>
                     </div>
                 </section>
 
@@ -152,26 +212,13 @@
                     </div>
                 </section>
 
-                <section class="panel-section">
-                    <h3>Grid</h3>
-                    <div class="grid-controls">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="grid-enabled" checked>
-                            <span>Enable Grid Snap</span>
-                        </label>
-                        <div class="grid-size-control">
-                            <label for="grid-size-slider">Size: <span id="grid-size-value">25</span>mm</label>
-                            <div class="grid-size-inputs">
-                                <input type="range" id="grid-size-slider" min="1" max="50" value="25">
-                                <input type="number" id="grid-size-input" min="1" max="50" value="25" class="property-input small">
-                            </div>
-                        </div>
-                    </div>
-                </section>
             </aside>
 
             <!-- Center - Canvas -->
             <div id="canvas-container">
+                <button id="btn-grid-settings" class="canvas-floating-btn" title="Grid Settings">
+                    <span class="icon">&#9638;</span>
+                </button>
                 <canvas id="main-canvas"></canvas>
                 <div id="zoom-controls">
                     <button id="zoom-in" title="Zoom In (+)">+</button>
@@ -202,20 +249,22 @@
                             <input type="text" id="prop-name" class="property-input">
                         </div>
                         <div class="property-group">
-                            <label class="property-label">Type</label>
-                            <span id="prop-type" class="property-value"></span>
+                            <div class="property-row">
+                                <label class="property-label">Type</label>
+                                <span id="prop-type" class="property-value"></span>
+                            </div>
                         </div>
                         <div class="property-group">
                             <label class="property-label">Position</label>
                             <div class="position-inputs">
-                                <label>X: <input type="number" id="prop-x" class="property-input small"> mm</label>
-                                <label>Y: <input type="number" id="prop-y" class="property-input small"> mm</label>
+                                <label>X <input type="number" id="prop-x" class="property-input small"> mm</label>
+                                <label>Y <input type="number" id="prop-y" class="property-input small"> mm</label>
                             </div>
                         </div>
                         <div class="property-group">
                             <label class="property-label">Angle</label>
-                            <input type="range" id="prop-angle-slider" min="0" max="360" value="0" class="angle-slider">
-                            <input type="number" id="prop-angle" class="property-input small" min="0" max="360"> deg
+                            <input type="range" id="prop-angle-slider" min="0" max="180" value="0" class="angle-slider">
+                            <input type="number" id="prop-angle" class="property-input small" min="0" max="180"> deg
                         </div>
                         <div class="property-group">
                             <label class="property-label">Mass</label>
@@ -224,8 +273,8 @@
                         <div class="property-group">
                             <label class="property-label">Size</label>
                             <div class="size-inputs">
-                                <label>W: <input type="number" id="prop-width" class="property-input small" min="1"> mm</label>
-                                <label>H: <input type="number" id="prop-height" class="property-input small" min="1"> mm</label>
+                                <label>W <input type="number" id="prop-width" class="property-input small" min="1"> mm</label>
+                                <label>H <input type="number" id="prop-height" class="property-input small" min="1"> mm</label>
                             </div>
                         </div>
                         <div class="property-group" id="optical-properties">
@@ -376,6 +425,47 @@
                         </div>
                         <div class="property-actions">
                             <button id="btn-delete-zone" class="action-btn danger">Delete Zone</button>
+                        </div>
+                    </div>
+                    <div id="segment-properties" class="hidden">
+                        <div class="property-group">
+                            <div class="property-row">
+                                <label class="property-label">Type</label>
+                                <span class="property-value">Beam Segment</span>
+                            </div>
+                        </div>
+                        <div class="property-group">
+                            <div class="property-row">
+                                <label class="property-label">Source</label>
+                                <span id="segment-prop-source" class="property-value"></span>
+                            </div>
+                        </div>
+                        <div class="property-group">
+                            <div class="property-row">
+                                <label class="property-label">Target</label>
+                                <span id="segment-prop-target" class="property-value"></span>
+                            </div>
+                        </div>
+                        <div class="property-group">
+                            <div class="property-row">
+                                <label class="property-label">Length</label>
+                                <span id="segment-prop-length" class="property-value"></span>
+                            </div>
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Wavelengths</label>
+                            <div id="segment-wavelengths-list" class="segment-wavelengths-list">
+                                <!-- Dynamically populated -->
+                            </div>
+                            <div class="segment-wavelength-actions">
+                                <select id="segment-wavelength-select" class="property-select">
+                                    <option value="">Add wavelength...</option>
+                                </select>
+                                <button id="btn-add-segment-wavelength" class="action-btn small">Add</button>
+                            </div>
+                        </div>
+                        <div class="property-actions">
+                            <button id="btn-delete-segment" class="action-btn danger">Delete Segment</button>
                         </div>
                     </div>
                 </section>

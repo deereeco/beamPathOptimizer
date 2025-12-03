@@ -2,7 +2,7 @@
 
 A web-based tool for designing and optimizing optical beam paths on a breadboard. Place optical components, connect them with laser beams, and use simulated annealing optimization to find optimal component placements.
 
-**Current Version: 1.2**
+**Current Version: 1.3**
 
 ## Features
 
@@ -25,12 +25,27 @@ Realistic optical constraints are enforced:
 ### Multiple Wavelengths / Beam Colors
 - Select wavelength before adding beams (Beams section in left panel)
 - **6 preset wavelengths**: 633nm HeNe (red), 532nm Nd:YAG (green), 1064nm IR, 405nm Violet, 780nm GaAs, 850nm VCSEL
-- Add custom wavelengths via the gear button
-- Beam segments can display multiple colors for co-aligned beams
+- **Wavelength Management**: Click "Manage Wavelengths" to:
+  - Add custom wavelengths with HTML5 color picker
+  - Edit existing wavelength names and colors
+  - Delete custom wavelengths (presets are protected)
+  - View all wavelengths with color swatches
+- **Edit Beam Segments**: Select any beam segment to:
+  - Add multiple wavelengths to the same segment (for co-aligned beams)
+  - Remove wavelengths from segments
+  - View all wavelengths on a segment with color swatches
+- Segments display with divided colors when multiple wavelengths are present
 
 ### Workspace Settings
-- **Background**: Choose solid color or image file via Settings (gear icon in toolbar)
-- **Grid**: Toggle grid snapping on/off globally, adjust grid size (1-50mm) in the Grid section
+- **Background** (Settings modal - gear icon in toolbar):
+  - Choose solid color with color picker
+  - Or select image file for background
+  - Adjust image opacity (0-100%)
+  - "Reset to Default" button to restore original dark background
+- **Grid** (Grid Settings button - top-right corner of canvas):
+  - Toggle grid visibility on/off (hidden by default)
+  - Toggle grid snapping independently
+  - Adjust grid size (1-50mm)
 
 ### Constraint Overrides
 Each component has checkboxes to relax constraints when needed:
@@ -70,11 +85,16 @@ After optimization completes, click "View Results" to explore the optimization h
 - **Keep-out Zones** - Areas where components cannot be placed (red)
 
 ### UI Features
-- **Drag-and-drop** components from palette to canvas
-- **Pan and zoom** navigation (scroll wheel, shift+drag)
-- **Multi-select** components (Ctrl+click or drag box)
-- **Resizable right panel** - drag divider to adjust width
+- **Drag-and-drop** components from palette to canvas with visual preview
+- **Pan and zoom** navigation (scroll wheel, shift+drag, middle mouse)
+- **Multi-select** components and beam segments (Ctrl+click or drag box)
+- **Resizable right panel** - drag divider to adjust width (180-400px)
 - **Adjustable text size** - slider at top of properties panel (80-150%)
+- **Properties Panel** shows details for:
+  - Components (position, angle, size, physics properties)
+  - Zones (keep-out and mounting zones)
+  - Beam Segments (source, target, length, wavelengths)
+- **Angle inputs limited to 0-180°** for easier use
 - Undo/Redo (Ctrl+Z / Ctrl+Shift+Z)
 - Save/Load projects as JSON
 - Real-time center of mass display
@@ -85,7 +105,7 @@ After optimization completes, click "View Results" to explore the optimization h
 ### Getting Started
 1. Open `index.html` in a web browser (serve via HTTP server for ES modules)
 2. Drag a component from the left panel onto the canvas
-3. Components snap to grid automatically (grid size adjustable in Grid section)
+3. Components snap to grid automatically (grid size adjustable via Grid Settings button)
 4. Use the Properties panel on the right to adjust component settings
 
 ### Creating Beam Connections
@@ -93,6 +113,16 @@ After optimization completes, click "View Results" to explore the optimization h
 2. Click the "Add Beams" tool
 3. Click on a source component, then click on a target component
 4. If the connection is physically valid, a beam segment is created
+
+### Editing Beam Segments
+1. Click on a beam segment to select it
+2. The Properties panel shows segment details:
+   - Source and target components
+   - Path length
+   - Current wavelengths with color swatches
+3. Add additional wavelengths from the dropdown (for co-aligned beams)
+4. Remove wavelengths by clicking the × button
+5. Delete segments with the "Delete Segment" button
 
 ### Running the Optimizer
 1. Place your components and create beam connections
@@ -155,9 +185,9 @@ beamPathOptimizer/
 ## Technical Details
 
 ### Coordinate System
-- Origin (0,0) is at top-left of workspace
-- X increases to the right
-- Y increases downward
+- Origin (0,0) is at the center of workspace
+- X increases to the right (ranges from -width/2 to +width/2)
+- Y increases downward (ranges from -height/2 to +height/2)
 - Default workspace: 600mm x 600mm
 - Default grid size: 25mm (configurable 1-50mm)
 

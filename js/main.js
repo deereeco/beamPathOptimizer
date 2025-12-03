@@ -165,6 +165,9 @@ class BeamPathOptimizerApp {
         // Zone property inputs
         this.setupZonePropertyInputs();
 
+        // Segment property inputs
+        this.setupSegmentPropertyInputs();
+
         // Optimizer controls
         this.setupOptimizerControls();
     }
@@ -201,6 +204,11 @@ class BeamPathOptimizerApp {
                 let value = input.type === 'checkbox' ? input.checked :
                            input.type === 'range' ? parseFloat(input.value) :
                            input.type === 'number' ? parseFloat(input.value) : input.value;
+
+                // Clamp angle to 0-180° range
+                if (propPath === 'angle') {
+                    value = Math.max(0, Math.min(180, value));
+                }
 
                 // Apply angle constraints if updating angle and allowAnyAngle is false
                 if (propPath === 'angle' && !component.allowAnyAngle) {
@@ -511,17 +519,45 @@ class BeamPathOptimizerApp {
      * Set up grid controls
      */
     setupGridControls() {
-        const gridEnabledCheckbox = document.getElementById('grid-enabled');
-        const gridSizeSlider = document.getElementById('grid-size-slider');
-        const gridSizeInput = document.getElementById('grid-size-input');
-        const gridSizeValue = document.getElementById('grid-size-value');
+        const btnGridSettings = document.getElementById('btn-grid-settings');
+        const gridModal = document.getElementById('grid-modal');
+        const closeModal = document.getElementById('close-grid-modal');
+
+        // Open modal
+        btnGridSettings?.addEventListener('click', () => {
+            this.syncGridModalFromState();
+            gridModal?.classList.remove('hidden');
+        });
+
+        // Close modal
+        closeModal?.addEventListener('click', () => {
+            gridModal?.classList.add('hidden');
+        });
+
+        // Close on backdrop click
+        gridModal?.addEventListener('click', (e) => {
+            if (e.target === gridModal) {
+                gridModal.classList.add('hidden');
+            }
+        });
+
+        // Grid visible toggle
+        const gridVisibleCheckbox = document.getElementById('grid-visible-modal');
+        gridVisibleCheckbox?.addEventListener('change', (e) => {
+            this.store.dispatch(actions.setGridSettings({ visible: e.target.checked }));
+        });
 
         // Grid enabled toggle
+        const gridEnabledCheckbox = document.getElementById('grid-enabled-modal');
         gridEnabledCheckbox?.addEventListener('change', (e) => {
             this.store.dispatch(actions.setGridSettings({ enabled: e.target.checked }));
         });
 
         // Grid size slider
+        const gridSizeSlider = document.getElementById('grid-size-slider-modal');
+        const gridSizeInput = document.getElementById('grid-size-input-modal');
+        const gridSizeValue = document.getElementById('grid-size-value-modal');
+
         gridSizeSlider?.addEventListener('input', (e) => {
             const size = parseInt(e.target.value, 10);
             if (gridSizeInput) gridSizeInput.value = size;
@@ -538,6 +574,21 @@ class BeamPathOptimizerApp {
             if (gridSizeValue) gridSizeValue.textContent = size;
             this.store.dispatch(actions.setGridSettings({ size }));
         });
+    }
+
+    syncGridModalFromState() {
+        const grid = this.store.getState().grid;
+        const gridVisibleCheckbox = document.getElementById('grid-visible-modal');
+        const gridEnabledCheckbox = document.getElementById('grid-enabled-modal');
+        const gridSizeSlider = document.getElementById('grid-size-slider-modal');
+        const gridSizeInput = document.getElementById('grid-size-input-modal');
+        const gridSizeValue = document.getElementById('grid-size-value-modal');
+
+        if (gridVisibleCheckbox) gridVisibleCheckbox.checked = grid.visible;
+        if (gridEnabledCheckbox) gridEnabledCheckbox.checked = grid.enabled;
+        if (gridSizeSlider) gridSizeSlider.value = grid.size;
+        if (gridSizeInput) gridSizeInput.value = grid.size;
+        if (gridSizeValue) gridSizeValue.textContent = grid.size;
     }
 
     /**
@@ -749,6 +800,54 @@ class BeamPathOptimizerApp {
                 radio.checked = radio.value === 'color';
             });
         });
+
+        // Reset background to default
+        const btnResetBackground = document.getElementById('btn-reset-background');
+        btnResetBackground?.addEventListener('click', () => {
+            this.store.dispatch(actions.setBackground({
+                type: 'color',
+                color: '#0d1117',
+                imagePath: null,
+                imageData: null
+            }));
+
+            // Sync UI
+            if (bgColorInput) bgColorInput.value = '#0d1117';
+            if (bgColorValue) bgColorValue.textContent = '#0d1117';
+            bgTypeRadios.forEach(radio => {
+                radio.checked = radio.value === 'color';
+            });
+            if (bgImageName) bgImageName.textContent = 'No image selected';
+            if (btnClearImage) btnClearImage.classList.add('hidden');
+            if (bgImageInput) bgImageInput.value = '';
+
+            this.showToast('Background reset to default', 'success');
+        });
+
+        // Opacity slider
+        const bgOpacitySlider = document.getElementById('bg-opacity');
+        const bgOpacityValue = document.getElementById('bg-opacity-value');
+        bgOpacitySlider?.addEventListener('input', (e) => {
+            const opacity = parseInt(e.target.value, 10);
+            if (bgOpacityValue) bgOpacityValue.textContent = opacity;
+
+            const state = this.store.getState();
+            this.store.dispatch(actions.setBackground({
+                ...state.background,
+                opacity
+            }));
+        });
+
+        // Sync opacity from state when modal opens
+        this.store.subscribe(() => {
+            const bg = this.store.getState().background;
+            if (bgOpacitySlider && bg.opacity !== undefined) {
+                bgOpacitySlider.value = bg.opacity;
+            }
+            if (bgOpacityValue && bg.opacity !== undefined) {
+                bgOpacityValue.textContent = bg.opacity;
+            }
+        });
     }
 
     /**
@@ -766,26 +865,184 @@ class BeamPathOptimizerApp {
             this.store.dispatch(actions.setActiveWavelength(e.target.value));
         });
 
-        // Manage wavelengths button - opens prompt for now (simplified)
+        // Manage wavelengths button - opens modal
         btnManage?.addEventListener('click', () => {
-            const name = prompt('Enter wavelength name (e.g., "488nm Argon"):');
-            if (!name) return;
-
-            const color = prompt('Enter color hex code (e.g., "#00ffff"):');
-            if (!color || !color.match(/^#[0-9a-fA-F]{6}$/)) {
-                this.showToast('Invalid color format. Use #RRGGBB', 'warning');
-                return;
-            }
-
-            this.store.dispatch(actions.addWavelength(name, color));
-            this.updateWavelengthDropdown();
-            this.showToast(`Added wavelength: ${name}`, 'success');
+            this.openWavelengthModal();
         });
 
         // Subscribe to state changes to update dropdown
         this.store.subscribe(() => {
             this.updateWavelengthDropdown();
         });
+    }
+
+    /**
+     * Open wavelength management modal
+     */
+    openWavelengthModal() {
+        const modal = document.getElementById('wavelength-modal');
+        modal?.classList.remove('hidden');
+        this.renderWavelengthList();
+
+        // Close modal handlers
+        document.getElementById('close-wavelength-modal')?.addEventListener('click', () => {
+            modal?.classList.add('hidden');
+        });
+
+        modal?.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.add('hidden');
+        });
+
+        // Add new wavelength
+        document.getElementById('btn-add-wavelength')?.addEventListener('click', () => {
+            this.addNewWavelength();
+        });
+    }
+
+    /**
+     * Render wavelength list in modal
+     */
+    renderWavelengthList() {
+        const list = document.getElementById('wavelength-list');
+        if (!list) return;
+
+        const wavelengths = this.store.getState().wavelengths || [];
+
+        list.innerHTML = wavelengths.map(w => `
+            <div class="wavelength-item" data-id="${w.id}">
+                <div class="swatch" style="background-color: ${w.color}"></div>
+                <input type="text" class="name" value="${w.name}" readonly data-id="${w.id}">
+                <input type="color" class="color-picker hidden" value="${w.color}" data-id="${w.id}">
+                <div class="actions">
+                    <button class="edit-btn" data-id="${w.id}">Edit</button>
+                    <button class="save-btn hidden" data-id="${w.id}">Save</button>
+                    <button class="cancel-btn hidden" data-id="${w.id}">Cancel</button>
+                    <button class="delete-btn delete" data-id="${w.id}" ${w.isPreset ? 'disabled' : ''}>Delete</button>
+                </div>
+            </div>
+        `).join('');
+
+        this.attachWavelengthItemHandlers();
+    }
+
+    /**
+     * Attach event handlers to wavelength items
+     */
+    attachWavelengthItemHandlers() {
+        // Edit buttons
+        document.querySelectorAll('.wavelength-item .edit-btn').forEach(btn => {
+            btn.addEventListener('click', () => this.editWavelength(btn.dataset.id));
+        });
+
+        // Save buttons
+        document.querySelectorAll('.wavelength-item .save-btn').forEach(btn => {
+            btn.addEventListener('click', () => this.saveWavelength(btn.dataset.id));
+        });
+
+        // Cancel buttons
+        document.querySelectorAll('.wavelength-item .cancel-btn').forEach(btn => {
+            btn.addEventListener('click', () => this.cancelEditWavelength());
+        });
+
+        // Delete buttons
+        document.querySelectorAll('.wavelength-item .delete-btn').forEach(btn => {
+            btn.addEventListener('click', () => this.deleteWavelength(btn.dataset.id));
+        });
+    }
+
+    /**
+     * Add new wavelength
+     */
+    addNewWavelength() {
+        const nameInput = document.getElementById('new-wavelength-name');
+        const colorInput = document.getElementById('new-wavelength-color');
+
+        const name = nameInput?.value.trim();
+        const color = colorInput?.value;
+
+        if (!name) {
+            this.showToast('Wavelength name required', 'warning');
+            return;
+        }
+
+        this.store.dispatch(actions.addWavelength(name, color));
+        this.renderWavelengthList();
+
+        // Clear inputs
+        if (nameInput) nameInput.value = '';
+        if (colorInput) colorInput.value = '#ff0000';
+
+        this.showToast(`Added wavelength: ${name}`, 'success');
+    }
+
+    /**
+     * Edit wavelength - enable editing mode
+     */
+    editWavelength(id) {
+        const item = document.querySelector(`.wavelength-item[data-id="${id}"]`);
+        if (!item) return;
+
+        const nameInput = item.querySelector('.name');
+        const colorPicker = item.querySelector('.color-picker');
+        const editBtn = item.querySelector('.edit-btn');
+        const saveBtn = item.querySelector('.save-btn');
+        const cancelBtn = item.querySelector('.cancel-btn');
+
+        // Enable editing
+        nameInput?.removeAttribute('readonly');
+        colorPicker?.classList.remove('hidden');
+        editBtn?.classList.add('hidden');
+        saveBtn?.classList.remove('hidden');
+        cancelBtn?.classList.remove('hidden');
+    }
+
+    /**
+     * Save wavelength changes
+     */
+    saveWavelength(id) {
+        const item = document.querySelector(`.wavelength-item[data-id="${id}"]`);
+        if (!item) return;
+
+        const nameInput = item.querySelector('.name');
+        const colorPicker = item.querySelector('.color-picker');
+
+        const name = nameInput?.value.trim();
+        const color = colorPicker?.value;
+
+        if (!name) {
+            this.showToast('Wavelength name required', 'warning');
+            return;
+        }
+
+        this.store.dispatch(actions.updateWavelength(id, { name, color }));
+        this.renderWavelengthList();
+        this.showToast('Wavelength updated', 'success');
+    }
+
+    /**
+     * Cancel wavelength editing
+     */
+    cancelEditWavelength() {
+        this.renderWavelengthList(); // Re-render to reset
+    }
+
+    /**
+     * Delete wavelength
+     */
+    deleteWavelength(id) {
+        const wavelengths = this.store.getState().wavelengths || [];
+        const wavelength = wavelengths.find(w => w.id === id);
+
+        if (wavelength?.isPreset) {
+            this.showToast('Cannot delete preset wavelengths', 'warning');
+            return;
+        }
+
+        if (confirm(`Delete wavelength "${wavelength?.name}"?`)) {
+            this.store.dispatch(actions.deleteWavelength(id));
+            this.renderWavelengthList();
+            this.showToast('Wavelength deleted', 'success');
+        }
     }
 
     /**
@@ -921,6 +1178,42 @@ class BeamPathOptimizerApp {
 
         // Delete zone button
         document.getElementById('btn-delete-zone')?.addEventListener('click', () => {
+            this.deleteSelected();
+        });
+    }
+
+    /**
+     * Set up segment property input bindings
+     */
+    setupSegmentPropertyInputs() {
+        // Add wavelength to segment
+        document.getElementById('btn-add-segment-wavelength')?.addEventListener('click', () => {
+            const state = this.store.getState();
+            const selectedSegmentIds = state.ui.selection.selectedSegmentIds || [];
+            if (selectedSegmentIds.length === 0) return;
+
+            const selectEl = document.getElementById('segment-wavelength-select');
+            const wavelengthId = selectEl?.value;
+            if (!wavelengthId) return;
+
+            // Add wavelength to all selected segments
+            selectedSegmentIds.forEach(segmentId => {
+                const segment = state.beamPath.segments.get(segmentId);
+                if (segment) {
+                    const currentWavelengthIds = segment.wavelengthIds || [];
+                    if (!currentWavelengthIds.includes(wavelengthId)) {
+                        const newWavelengthIds = [...currentWavelengthIds, wavelengthId];
+                        this.store.dispatch(actions.updateSegmentWavelengths(segmentId, newWavelengthIds));
+                    }
+                }
+            });
+
+            // Reset dropdown
+            selectEl.value = '';
+        });
+
+        // Delete segment button
+        document.getElementById('btn-delete-segment')?.addEventListener('click', () => {
             this.deleteSelected();
         });
     }
@@ -2814,11 +3107,13 @@ class BeamPathOptimizerApp {
         // Update property panel
         const selectedId = state.ui.selection.selectedIds[0];
         const selectedZoneId = state.ui.selection.selectedZoneId;
+        const selectedSegmentIds = state.ui.selection.selectedSegmentIds || [];
         const selectionType = state.ui.selection.type;
 
         const noSelection = document.getElementById('no-selection');
         const componentProps = document.getElementById('component-properties');
         const zoneProps = document.getElementById('zone-properties');
+        const segmentProps = document.getElementById('segment-properties');
         const selectionSection = document.getElementById('selection-info');
         const optimizerSection = document.getElementById('optimizer-section');
 
@@ -2826,10 +3121,12 @@ class BeamPathOptimizerApp {
         noSelection.classList.add('hidden');
         componentProps.classList.add('hidden');
         zoneProps.classList.add('hidden');
+        segmentProps.classList.add('hidden');
 
         // Toggle between properties and optimizer sections
         const hasSelection = (selectionType === 'component' && selectedId && state.components.has(selectedId)) ||
-                             (selectionType === 'zone' && selectedZoneId);
+                             (selectionType === 'zone' && selectedZoneId) ||
+                             (selectionType === 'segment' && selectedSegmentIds.length > 0);
 
         if (hasSelection) {
             // Show properties section, hide optimizer
@@ -2851,8 +3148,12 @@ class BeamPathOptimizerApp {
             document.getElementById('prop-type').textContent = ComponentNames[component.type] || component.type;
             document.getElementById('prop-x').value = component.position.x.toFixed(1);
             document.getElementById('prop-y').value = component.position.y.toFixed(1);
-            document.getElementById('prop-angle').value = component.angle;
-            document.getElementById('prop-angle-slider').value = component.angle;
+
+            // Normalize angle to 0-180° range for display
+            const displayAngle = component.angle > 180 ? component.angle % 180 : component.angle;
+            document.getElementById('prop-angle').value = displayAngle;
+            document.getElementById('prop-angle-slider').value = displayAngle;
+
             document.getElementById('prop-mass').value = component.mass;
             document.getElementById('prop-width').value = component.size.width;
             document.getElementById('prop-height').value = component.size.height;
@@ -2994,6 +3295,30 @@ class BeamPathOptimizerApp {
             } else {
                 noSelection.classList.remove('hidden');
             }
+        } else if (selectionType === 'segment' && selectedSegmentIds.length > 0) {
+            // Show segment properties
+            const segmentId = selectedSegmentIds[0]; // For now, show first selected segment
+            const segment = state.beamPath.segments.get(segmentId);
+
+            if (segment) {
+                segmentProps.classList.remove('hidden');
+
+                // Get source and target component names
+                const sourceComp = state.components.get(segment.sourceId);
+                const targetComp = state.components.get(segment.targetId);
+
+                document.getElementById('segment-prop-source').textContent = sourceComp ? sourceComp.name : 'Unknown';
+                document.getElementById('segment-prop-target').textContent = targetComp ? targetComp.name : 'Unknown';
+                document.getElementById('segment-prop-length').textContent = segment.pathLength.toFixed(1) + ' mm';
+
+                // Populate wavelengths list
+                this.updateSegmentWavelengthsList(segment, state.wavelengths);
+
+                // Populate wavelength dropdown
+                this.updateSegmentWavelengthDropdown(segment, state.wavelengths);
+            } else {
+                noSelection.classList.remove('hidden');
+            }
         } else {
             noSelection.classList.remove('hidden');
         }
@@ -3001,6 +3326,74 @@ class BeamPathOptimizerApp {
         // Update undo/redo buttons
         document.getElementById('btn-undo').disabled = !this.store.canUndo();
         document.getElementById('btn-redo').disabled = !this.store.canRedo();
+    }
+
+    /**
+     * Update segment wavelengths list display
+     */
+    updateSegmentWavelengthsList(segment, wavelengths) {
+        const listEl = document.getElementById('segment-wavelengths-list');
+        if (!listEl) return;
+
+        listEl.innerHTML = '';
+
+        if (!segment.wavelengthIds || segment.wavelengthIds.length === 0) {
+            listEl.innerHTML = '<div style="font-size: 11px; color: var(--text-secondary); padding: 8px;">No wavelengths</div>';
+            return;
+        }
+
+        segment.wavelengthIds.forEach(wlId => {
+            const wavelength = wavelengths.find(w => w.id === wlId);
+            if (wavelength) {
+                const item = document.createElement('div');
+                item.className = 'segment-wavelength-item';
+                item.innerHTML = `
+                    <div class="swatch" style="background-color: ${wavelength.color}"></div>
+                    <span class="name">${wavelength.name}</span>
+                    <button class="remove-btn" data-wavelength-id="${wlId}" title="Remove">&times;</button>
+                `;
+                listEl.appendChild(item);
+
+                // Add remove handler
+                item.querySelector('.remove-btn').addEventListener('click', () => {
+                    this.removeWavelengthFromSegment(segment.id, wlId);
+                });
+            }
+        });
+    }
+
+    /**
+     * Update segment wavelength dropdown
+     */
+    updateSegmentWavelengthDropdown(segment, wavelengths) {
+        const selectEl = document.getElementById('segment-wavelength-select');
+        if (!selectEl) return;
+
+        // Clear existing options except first
+        selectEl.innerHTML = '<option value="">Add wavelength...</option>';
+
+        // Add wavelengths that are not already on the segment
+        const segmentWavelengthIds = segment.wavelengthIds || [];
+        wavelengths.forEach(wl => {
+            if (!segmentWavelengthIds.includes(wl.id)) {
+                const option = document.createElement('option');
+                option.value = wl.id;
+                option.textContent = wl.name;
+                selectEl.appendChild(option);
+            }
+        });
+    }
+
+    /**
+     * Remove a wavelength from the selected segment(s)
+     */
+    removeWavelengthFromSegment(segmentId, wavelengthId) {
+        const state = this.store.getState();
+        const segment = state.beamPath.segments.get(segmentId);
+        if (!segment) return;
+
+        const newWavelengthIds = segment.wavelengthIds.filter(id => id !== wavelengthId);
+        this.store.dispatch(actions.updateSegmentWavelengths(segmentId, newWavelengthIds));
     }
 
     /**

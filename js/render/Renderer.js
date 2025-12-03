@@ -85,9 +85,11 @@ export class Renderer {
         ctx.save();
         this.applyViewportTransform(viewport);
 
-        // Calculate workspace bounds
-        const x = 0;
-        const y = 0;
+        // Calculate workspace bounds (centered at origin)
+        const halfW = workspace.width / 2;
+        const halfH = workspace.height / 2;
+        const x = -halfW;
+        const y = -halfH;
         const width = workspace.width;
         const height = workspace.height;
 
@@ -96,7 +98,11 @@ export class Renderer {
             ctx.fillRect(x, y, width, height);
         } else if (background.type === 'image' && background.imageData) {
             try {
+                // Apply opacity for background image
+                const opacity = (background.opacity !== undefined) ? background.opacity / 100 : 1.0;
+                ctx.globalAlpha = opacity;
                 ctx.drawImage(background.imageData, x, y, width, height);
+                ctx.globalAlpha = 1.0; // Reset
             } catch (e) {
                 // If image fails to draw, fall back to color
                 ctx.fillStyle = background.color || this.colors.background;
@@ -208,7 +214,7 @@ export class Renderer {
     /**
      * Draw the workspace boundary
      */
-    drawWorkspace(workspace, viewport) {
+    drawWorkspace(workspace, viewport, background) {
         const ctx = this.ctx;
 
         // Calculate workspace corners in screen coordinates
@@ -221,9 +227,17 @@ export class Renderer {
         const w = bottomRight.x - topLeft.x;
         const h = bottomRight.y - topLeft.y;
 
-        // Fill workspace area
-        ctx.fillStyle = this.colors.workspace;
-        ctx.fillRect(topLeft.x, topLeft.y, w, h);
+        // Fill workspace area only if no custom background is set
+        // (Check if background is default or if only default color is set)
+        const hasCustomBackground = background && (
+            (background.type === 'image' && background.imagePath) ||
+            (background.type === 'color' && background.color !== '#0d1117')
+        );
+
+        if (!hasCustomBackground) {
+            ctx.fillStyle = this.colors.workspace;
+            ctx.fillRect(topLeft.x, topLeft.y, w, h);
+        }
 
         // Draw border
         ctx.strokeStyle = this.colors.workspaceBorder;
@@ -500,11 +514,29 @@ export class Renderer {
 
         ctx.restore();
 
-        // Draw label
-        ctx.fillStyle = '#ffffff';
+        // Draw label with background for visibility on any background
         ctx.font = '11px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(component.name, screen.x, screen.y + halfH + 14);
+        const labelText = component.name;
+        const textMetrics = ctx.measureText(labelText);
+        const textWidth = textMetrics.width;
+        const textHeight = 11; // font size
+        const padding = 4;
+        const labelX = screen.x;
+        const labelY = screen.y + halfH + 14;
+
+        // Draw semi-transparent background rectangle
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(
+            labelX - textWidth / 2 - padding,
+            labelY - textHeight + 2,
+            textWidth + padding * 2,
+            textHeight + padding
+        );
+
+        // Draw white text on top
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(labelText, labelX, labelY);
 
         // Draw fixed indicator
         if (component.isFixed) {
@@ -764,7 +796,8 @@ export class Renderer {
         const angle = Math.atan2(end.y - start.y, end.x - start.x);
         const arrowSize = 8;
 
-        ctx.fillStyle = color;
+        // Always use black for arrow direction indicator
+        ctx.fillStyle = '#000000';
         ctx.beginPath();
         ctx.moveTo(
             midX + arrowSize * Math.cos(angle),
@@ -885,13 +918,13 @@ export class Renderer {
         // Draw background
         this.drawBackground(background, constraints.workspace, viewport);
 
-        // Draw grid (only if enabled)
-        if (!grid || grid.enabled) {
+        // Draw grid (only if enabled AND visible)
+        if (grid && grid.visible) {
             this.drawGrid(constraints.workspace, viewport);
         }
 
-        // Draw workspace boundary
-        this.drawWorkspace(constraints.workspace, viewport);
+        // Draw workspace boundary (pass background to avoid covering it)
+        this.drawWorkspace(constraints.workspace, viewport, background);
 
         // Draw constraints (with selection state)
         this.drawKeepOutZones(constraints.keepOutZones, viewport, selection.selectedZoneId, selection.hoveredZoneId);

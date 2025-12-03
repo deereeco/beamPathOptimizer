@@ -1,6 +1,89 @@
 BEAM PATH OPTIMIZER - VERSION LOG
 ================================================================================
 
+Version 1.3 (2025-12-03)
+--------------------------------------------------------------------------------
+Bug Fixes:
+
+  • Fixed Critical Background Rendering Bug
+    - Background now properly fills entire workspace area
+    - Previous: Background only rendered in center portion due to coordinate system mismatch
+    - Fixed: Adjusted drawBackground() to use centered world coordinates (-width/2 to +width/2)
+    - Issue was visible when using solid colors or background images
+
+New Features:
+
+  • Wavelength Management Modal
+    - Replaced browser prompts with full-featured modal interface
+    - Button now displays "Manage Wavelengths" text instead of gear icon
+    - Add, edit, and delete custom wavelengths with visual color picker
+    - List view shows all wavelengths with color swatches
+    - Preset wavelengths cannot be deleted (protected)
+    - HTML5 color picker for easy color selection (no hex codes needed)
+
+  • Background Image Opacity Control
+    - New opacity slider (0-100%) in Settings modal
+    - Applies transparency to background images
+    - Saved in state and persists across sessions
+    - 0% = completely transparent, 100% = fully opaque
+
+  • Grid Settings Relocated
+    - Moved from left panel to floating button in top-right corner of canvas
+    - Click grid icon (⚞) to open modal dialog
+    - Cleaner left panel with more space for tools
+    - Grid settings: enable/disable snap, adjust size (1-50mm)
+    - Settings persist and sync with state
+
+  • Default Background Reset Button
+    - New "Reset to Default" button in Settings modal
+    - Quickly revert to default dark background (#0d1117)
+    - Clears any selected image or custom color
+    - One-click restoration of original appearance
+
+UI/UX Improvements:
+
+  • Angle Range Limited to 0-180°
+    - Input fields and sliders now constrained to 0-180° range
+    - Components with angles >180° are normalized for display
+    - Prevents confusion with angle wrapping
+    - Simplifies angle input for users
+
+  • Properties Pane Restructured (Left-Aligned Layout)
+    - Changed from center-aligned to left-aligned with 12px padding
+    - Labels on left, values on right for better readability
+    - Each property gets its own visual row
+    - Position and Size inputs stacked vertically for clarity
+    - Example layout:
+      ```
+      Name:     [textbox]
+      Type:     Waveplate
+      Position: X [value] mm
+                Y [value] mm
+      ```
+
+  • Left Panel Items Centered
+    - All items in left panel sections now properly centered
+    - Tool buttons, component palette, and controls aligned
+    - More polished and professional appearance
+
+  • Category Headers Emphasized
+    - Section headers ("Navigation", "Beams", "Zones") are now bigger and bolder
+    - Font size increased: 11px → 13px
+    - Font weight increased: 600 → 700
+    - Makes navigation hierarchy immediately obvious
+
+Technical Changes:
+
+  • Version bumped to 1.3
+  • Background state extended with opacity property
+  • Grid section removed from left panel HTML
+  • New modal components: wavelength-modal, grid-modal
+  • CSS updates for left-alignment, centering, and new modals
+  • Floating button component added for canvas overlay UI
+  • Wavelength CRUD operations: add, edit, delete with validation
+  • Coordinate system fix in Renderer.drawBackground()
+
+
 Version 1.2 (2025-12-03)
 --------------------------------------------------------------------------------
 New Features:
