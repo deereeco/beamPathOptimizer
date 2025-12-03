@@ -4,8 +4,9 @@
 
 import { Component, ComponentType, ComponentNames } from './models/Component.js';
 import { BeamSegment, BeamPath } from './models/BeamPath.js';
-import { Store, actions, createInitialState } from './state.js';
+import { Store, actions, createInitialState, APP_VERSION, needsMigration } from './state.js';
 import { Renderer } from './render/Renderer.js';
+import { ResultsGraph } from './render/ResultsGraph.js';
 import { Optimizer, OptimizerState } from './optimization/Optimizer.js';
 import * as BeamPhysics from './physics/BeamPhysics.js';
 
@@ -36,6 +37,12 @@ class BeamPathOptimizerApp {
         this.originalPositionsBeforeOptimize = null;
         this.selectionBoxStart = null;
 
+        // Results View state
+        this.resultsGraph = null;
+        this.isResultsViewOpen = false;
+        this.previewSnapshot = null;
+        this.isSplitScreenMode = false;
+
         // Bind methods
         this.render = this.render.bind(this);
         this.handleMouseDown = this.handleMouseDown.bind(this);
@@ -58,7 +65,13 @@ class BeamPathOptimizerApp {
         this.render();
         this.updateUI();
 
-        console.log('Beam Path Optimizer initialized');
+        // Set version display
+        const versionEl = document.getElementById('app-version');
+        if (versionEl) {
+            versionEl.textContent = APP_VERSION.toString();
+        }
+
+        console.log('Beam Path Optimizer initialized', APP_VERSION.toString());
     }
 
     /**
@@ -142,7 +155,8 @@ class BeamPathOptimizerApp {
             'prop-mass': 'mass',
             'prop-width': 'size.width',
             'prop-height': 'size.height',
-            'prop-fixed': 'isFixed'
+            'prop-fixed': 'isFixed',
+            'prop-angle-fixed': 'isAngleFixed'
         };
 
         Object.entries(inputs).forEach(([inputId, propPath]) => {
@@ -627,6 +641,14 @@ class BeamPathOptimizerApp {
             this.revertOptimization();
         });
 
+        // View Results button
+        document.getElementById('btn-view-results')?.addEventListener('click', () => {
+            this.openResultsView();
+        });
+
+        // Set up results view controls
+        this.setupResultsViewControls();
+
         // Set up optimizer callbacks
         this.optimizer.onProgress = (progress) => {
             this.updateOptimizerProgress(progress);
@@ -647,6 +669,157 @@ class BeamPathOptimizerApp {
         this.optimizer.onComplete = (result) => {
             this.onOptimizationComplete(result);
         };
+    }
+
+    /**
+     * Set up results view controls
+     */
+    setupResultsViewControls() {
+        // Preview Selected button
+        document.getElementById('btn-preview-selected')?.addEventListener('click', () => {
+            this.previewSelectedSnapshot();
+        });
+
+        // Apply This Layout button
+        document.getElementById('btn-apply-selected')?.addEventListener('click', () => {
+            this.applySelectedSnapshot();
+        });
+
+        // Close Results View button
+        document.getElementById('btn-close-results')?.addEventListener('click', () => {
+            this.closeResultsView();
+        });
+
+        // Split-screen checkbox
+        document.getElementById('results-split-screen')?.addEventListener('change', (e) => {
+            this.isSplitScreenMode = e.target.checked;
+            this.render();
+        });
+    }
+
+    /**
+     * Open the results view panel
+     */
+    openResultsView() {
+        const snapshots = this.optimizer.getSnapshots();
+        if (snapshots.length === 0) {
+            alert('No optimization data available.');
+            return;
+        }
+
+        // Show results section
+        document.getElementById('results-section')?.classList.remove('hidden');
+        this.isResultsViewOpen = true;
+
+        // Initialize results graph if not already done
+        const graphCanvas = document.getElementById('results-graph');
+        if (graphCanvas && !this.resultsGraph) {
+            this.resultsGraph = new ResultsGraph(graphCanvas);
+
+            // Set up graph callbacks
+            this.resultsGraph.onHover = (snapshot, index) => {
+                this.updateResultsTooltip(snapshot);
+            };
+
+            this.resultsGraph.onClick = (snapshot, index) => {
+                this.selectResultsSnapshot(snapshot, index);
+            };
+
+            this.resultsGraph.onDoubleClick = (snapshot, index) => {
+                this.previewSnapshot = snapshot;
+                this.render();
+            };
+        }
+
+        // Load data into graph
+        if (this.resultsGraph) {
+            this.resultsGraph.setData(snapshots);
+        }
+
+        // Reset preview state
+        this.previewSnapshot = null;
+        this.isSplitScreenMode = false;
+        document.getElementById('results-split-screen').checked = false;
+    }
+
+    /**
+     * Close the results view panel
+     */
+    closeResultsView() {
+        document.getElementById('results-section')?.classList.add('hidden');
+        this.isResultsViewOpen = false;
+        this.previewSnapshot = null;
+        this.isSplitScreenMode = false;
+        this.render();
+    }
+
+    /**
+     * Update the tooltip when hovering over graph
+     */
+    updateResultsTooltip(snapshot) {
+        const tooltipEl = document.getElementById('results-tooltip');
+        if (!tooltipEl) return;
+
+        if (snapshot) {
+            tooltipEl.textContent = `Iteration ${snapshot.iteration}, Cost: ${snapshot.cost.toFixed(1)}`;
+            tooltipEl.classList.add('active');
+        } else {
+            tooltipEl.textContent = 'Hover over graph to see iteration details';
+            tooltipEl.classList.remove('active');
+        }
+    }
+
+    /**
+     * Select a snapshot from the results graph
+     */
+    selectResultsSnapshot(snapshot, index) {
+        const selectedInfoEl = document.getElementById('selected-iteration-info');
+        const previewBtn = document.getElementById('btn-preview-selected');
+        const applyBtn = document.getElementById('btn-apply-selected');
+
+        if (snapshot) {
+            selectedInfoEl.textContent = `Iteration ${snapshot.iteration} (Cost: ${snapshot.cost.toFixed(1)})`;
+            previewBtn.disabled = false;
+            applyBtn.disabled = false;
+        } else {
+            selectedInfoEl.textContent = 'None';
+            previewBtn.disabled = true;
+            applyBtn.disabled = true;
+        }
+    }
+
+    /**
+     * Preview the selected snapshot
+     */
+    previewSelectedSnapshot() {
+        if (!this.resultsGraph) return;
+
+        const snapshot = this.resultsGraph.getSelectedSnapshot();
+        if (snapshot) {
+            this.previewSnapshot = snapshot;
+            this.render();
+        }
+    }
+
+    /**
+     * Apply the selected snapshot to the actual state
+     */
+    applySelectedSnapshot() {
+        if (!this.resultsGraph) return;
+
+        const snapshot = this.resultsGraph.getSelectedSnapshot();
+        if (!snapshot) return;
+
+        // Apply the snapshot positions and angles
+        this.optimizer.applySnapshot(snapshot, this.store.getState().components);
+
+        // Recalculate and render
+        this.store.dispatch(actions.markDirty());
+        this.previewSnapshot = null;
+        this.render();
+
+        // Close results view
+        this.closeResultsView();
     }
 
     /**
@@ -685,10 +858,12 @@ class BeamPathOptimizerApp {
             return;
         }
 
-        // Store original positions for revert
+        // Store original positions and angles for revert
         this.originalPositionsBeforeOptimize = new Map();
+        this.originalAnglesBeforeOptimize = new Map();
         state.components.forEach((comp, id) => {
             this.originalPositionsBeforeOptimize.set(id, { ...comp.position });
+            this.originalAnglesBeforeOptimize.set(id, comp.angle);
         });
 
         // Get weights and start
@@ -731,6 +906,15 @@ class BeamPathOptimizerApp {
             }
         });
 
+        // Apply best angles found
+        const bestAngles = this.optimizer.getBestAngles();
+        bestAngles.forEach((angle, id) => {
+            const comp = this.store.getState().components.get(id);
+            if (comp) {
+                comp.angle = angle;
+            }
+        });
+
         this.store.dispatch(actions.recalculate());
         this.render();
 
@@ -742,8 +926,9 @@ class BeamPathOptimizerApp {
      * Accept optimization results
      */
     acceptOptimization() {
-        // Positions are already applied, just reset UI
+        // Positions and angles are already applied, just reset UI
         this.originalPositionsBeforeOptimize = null;
+        this.originalAnglesBeforeOptimize = null;
         this.showOptimizerButtons('start');
         document.getElementById('optimizer-progress').classList.add('hidden');
         this.store.dispatch(actions.markDirty());
@@ -761,6 +946,17 @@ class BeamPathOptimizerApp {
                 }
             });
             this.originalPositionsBeforeOptimize = null;
+        }
+
+        // Revert angles
+        if (this.originalAnglesBeforeOptimize) {
+            this.originalAnglesBeforeOptimize.forEach((angle, id) => {
+                const comp = this.store.getState().components.get(id);
+                if (comp) {
+                    comp.angle = angle;
+                }
+            });
+            this.originalAnglesBeforeOptimize = null;
         }
 
         this.store.dispatch(actions.recalculate());
@@ -822,6 +1018,10 @@ class BeamPathOptimizerApp {
 
         // Do a full recalculate now that optimization is done
         this.store.dispatch(actions.recalculate());
+
+        // Clear selection so optimizer buttons remain visible in the panel
+        this.store.dispatch(actions.clearSelection());
+
         this.render();
         this.updateUI();
 
@@ -914,6 +1114,8 @@ class BeamPathOptimizerApp {
             this.canvas.style.cursor = 'grabbing';
         } else if (tool === 'select') {
             if (clickedComponent) {
+                const wasAlreadySelected = state.ui.selection.selectedIds.includes(clickedComponent.id);
+
                 // Ctrl+click for multi-select
                 if (e.ctrlKey || e.metaKey) {
                     const currentSelected = [...state.ui.selection.selectedIds];
@@ -926,14 +1128,36 @@ class BeamPathOptimizerApp {
                         currentSelected.push(clickedComponent.id);
                     }
                     this.store.dispatch(actions.selectMultiple(currentSelected));
-                } else {
-                    // Regular click - select single component
+                } else if (!wasAlreadySelected) {
+                    // Regular click on unselected component - select just this one
                     this.store.dispatch(actions.selectComponent(clickedComponent.id));
                 }
+                // If component was already selected (and no Ctrl), keep the current selection
+                // This allows dragging multiple selected components together
                 // Start dragging
                 this.isDragging = true;
                 this.dragStart = worldPos;
                 this.dragComponent = clickedComponent;
+                // Store original positions for beam constraint validation
+                // IMPORTANT: We must determine which components will ACTUALLY be dragged,
+                // not use stale state.ui.selection (which hasn't updated yet from the dispatch above)
+                this.dragOriginalPositions = new Map();
+
+                // Always include the clicked component
+                this.dragOriginalPositions.set(clickedComponent.id, { ...clickedComponent.position });
+
+                // For multi-select drag: if Ctrl was held OR if the clicked component was already selected,
+                // include other previously selected components
+                if ((e.ctrlKey || e.metaKey) || wasAlreadySelected) {
+                    state.ui.selection.selectedIds.forEach(id => {
+                        if (id !== clickedComponent.id) {
+                            const comp = state.components.get(id);
+                            if (comp) {
+                                this.dragOriginalPositions.set(id, { ...comp.position });
+                            }
+                        }
+                    });
+                }
             } else if (clickedZone) {
                 // Clicked on a zone
                 this.store.dispatch(actions.selectZone(clickedZone.id));
@@ -965,10 +1189,68 @@ class BeamPathOptimizerApp {
                 };
             }
         } else if (tool === 'connect') {
-            // Beam connection mode
+            // Beam connection mode - can select segments or create new connections
+            // IMPORTANT: Prioritize component clicks over segment clicks
+            // (segments end at components, so clicking a component would otherwise select the segment)
+
             if (clickedComponent && clickedComponent.canOutputBeam()) {
+                // Start creating new connection from this component
                 this.connectingFrom = clickedComponent;
                 console.log('Connecting from:', clickedComponent.name);
+            } else if (clickedComponent && clickedComponent.canReceiveBeam()) {
+                // Clicked on a component that can only receive (like detector with no outgoing)
+                // Check for segment selection instead
+                const clickedSegment = this.getSegmentAtPosition(worldPos.x, worldPos.y);
+                if (clickedSegment) {
+                    if (e.ctrlKey || e.metaKey) {
+                        const currentSelected = [...(state.ui.selection.selectedSegmentIds || [])];
+                        const idx = currentSelected.indexOf(clickedSegment.id);
+                        if (idx > -1) {
+                            currentSelected.splice(idx, 1);
+                        } else {
+                            currentSelected.push(clickedSegment.id);
+                        }
+                        this.store.dispatch(actions.selectMultipleSegments(currentSelected));
+                    } else {
+                        this.store.dispatch(actions.selectSegment(clickedSegment.id));
+                    }
+                }
+            } else {
+                // No component clicked - check for segment selection
+                const clickedSegment = this.getSegmentAtPosition(worldPos.x, worldPos.y);
+                if (clickedSegment) {
+                    // Ctrl+click for multi-select segments
+                    if (e.ctrlKey || e.metaKey) {
+                        const currentSelected = [...(state.ui.selection.selectedSegmentIds || [])];
+                        const idx = currentSelected.indexOf(clickedSegment.id);
+                        if (idx > -1) {
+                            currentSelected.splice(idx, 1);
+                        } else {
+                            currentSelected.push(clickedSegment.id);
+                        }
+                        this.store.dispatch(actions.selectMultipleSegments(currentSelected));
+                    } else {
+                        // Regular click - select single segment
+                        this.store.dispatch(actions.selectSegment(clickedSegment.id));
+                    }
+                } else {
+                    // Clicked on empty area in connect mode - start selection box for segments
+                    this.store.dispatch(actions.clearSelection());
+                    this.isSelectionBoxDragging = true;
+                    this.selectionBoxStart = worldPos;
+                    this.store.state = {
+                        ...state,
+                        ui: {
+                            ...state.ui,
+                            selectionBox: {
+                                startX: worldPos.x,
+                                startY: worldPos.y,
+                                endX: worldPos.x,
+                                endY: worldPos.y
+                            }
+                        }
+                    };
+                }
             }
         } else if (tool === 'keepout') {
             // Start drawing keep-out zone
@@ -1026,15 +1308,19 @@ class BeamPathOptimizerApp {
             if (!this.dragComponent.isFixed) {
                 // If multiple components selected, move all of them
                 const selectedIds = state.ui.selection.selectedIds;
-                if (selectedIds.length > 1 && selectedIds.includes(this.dragComponent.id)) {
+                if (selectedIds.length > 1 && selectedIds.includes(this.dragComponent.id) && this.dragOriginalPositions) {
+                    // Calculate total delta from ORIGINAL drag start position
                     const dx = worldPos.x - this.dragStart.x;
                     const dy = worldPos.y - this.dragStart.y;
-                    selectedIds.forEach(id => {
+
+                    // Use original positions to calculate new positions
+                    // This avoids issues with stale state during multiple dispatches
+                    this.dragOriginalPositions.forEach((origPos, id) => {
                         const comp = state.components.get(id);
                         if (comp && !comp.isFixed) {
                             let newPos = {
-                                x: comp.position.x + dx,
-                                y: comp.position.y + dy
+                                x: origPos.x + dx,
+                                y: origPos.y + dy
                             };
                             // Apply grid snapping if enabled for this component
                             if (comp.snapToGrid !== false) {
@@ -1043,9 +1329,9 @@ class BeamPathOptimizerApp {
                             this.store.dispatch(actions.moveComponent(id, newPos));
                         }
                     });
-                    this.dragStart = worldPos;
+                    // NOTE: Don't update dragStart - we use original positions and total delta
                 } else {
-                    // Apply grid snapping if enabled for this component
+                    // Single component drag - position follows mouse directly
                     let newPos = { x: worldPos.x, y: worldPos.y };
                     if (this.dragComponent.snapToGrid !== false) {
                         newPos = BeamPhysics.snapToGrid(newPos, 25);
@@ -1059,14 +1345,21 @@ class BeamPathOptimizerApp {
             const newY = worldPos.y - this.dragZoneOffset.y;
             this.store.dispatch(actions.moveZone(this.dragZone.id, { x: newX, y: newY }));
         } else {
-            // Hover detection for components and zones
+            // Hover detection for components, zones, and segments
             const hovered = this.getComponentAtPosition(worldPos.x, worldPos.y);
             const hoveredZone = !hovered ? this.getZoneAtPosition(worldPos.x, worldPos.y) : null;
+            // Only check for segment hover in connect mode
+            const hoveredSegment = (state.ui.tool === 'connect' && !hovered && !hoveredZone)
+                ? this.getSegmentAtPosition(worldPos.x, worldPos.y)
+                : null;
 
             const currentHovered = state.ui.selection.hoveredId;
             const currentHoveredZone = state.ui.selection.hoveredZoneId;
+            const currentHoveredSegment = state.ui.selection.hoveredSegmentId;
 
-            if (hovered?.id !== currentHovered || hoveredZone?.id !== currentHoveredZone) {
+            if (hovered?.id !== currentHovered ||
+                hoveredZone?.id !== currentHoveredZone ||
+                hoveredSegment?.id !== currentHoveredSegment) {
                 // Update hover state (without adding to history)
                 const newState = {
                     ...state,
@@ -1075,7 +1368,8 @@ class BeamPathOptimizerApp {
                         selection: {
                             ...state.ui.selection,
                             hoveredId: hovered?.id || null,
-                            hoveredZoneId: hoveredZone?.id || null
+                            hoveredZoneId: hoveredZone?.id || null,
+                            hoveredSegmentId: hoveredSegment?.id || null
                         }
                     }
                 };
@@ -1102,19 +1396,45 @@ class BeamPathOptimizerApp {
         }
 
         if (this.isDragging) {
+            // Validate beam constraints before finalizing drag
+            if (this.dragOriginalPositions && this.dragOriginalPositions.size > 0) {
+                const validation = this.validateMovementForBeamConstraints(this.dragOriginalPositions);
+                if (!validation.valid) {
+                    // Snap back to original positions
+                    this.dragOriginalPositions.forEach((origPos, id) => {
+                        const comp = state.components.get(id);
+                        if (comp) {
+                            comp.position = { ...origPos };
+                        }
+                    });
+                    this.store.dispatch(actions.recalculate());
+                    this.render();
+                    // Show warning
+                    this.showMovementWarning(validation.error);
+                }
+            }
             this.isDragging = false;
             this.dragComponent = null;
             this.dragZone = null;
             this.dragZoneOffset = null;
+            this.dragOriginalPositions = null;
         }
 
         // Handle selection box completion
         if (this.isSelectionBoxDragging) {
             const box = state.ui.selectionBox;
             if (box) {
-                const selectedIds = this.getComponentsInBox(box);
-                if (selectedIds.length > 0) {
-                    this.store.dispatch(actions.selectMultiple(selectedIds));
+                // In connect mode, select segments; otherwise select components
+                if (state.ui.tool === 'connect') {
+                    const selectedSegmentIds = this.getSegmentsInBox(box);
+                    if (selectedSegmentIds.length > 0) {
+                        this.store.dispatch(actions.selectMultipleSegments(selectedSegmentIds));
+                    }
+                } else {
+                    const selectedIds = this.getComponentsInBox(box);
+                    if (selectedIds.length > 0) {
+                        this.store.dispatch(actions.selectMultiple(selectedIds));
+                    }
                 }
             }
             // Clear selection box
@@ -1194,6 +1514,17 @@ class BeamPathOptimizerApp {
                 this.deleteSelected();
                 break;
             case 'Escape':
+                // Exit preview mode if active
+                if (this.previewSnapshot) {
+                    this.previewSnapshot = null;
+                    this.render();
+                    break;
+                }
+                // Close results view if open
+                if (this.isResultsViewOpen) {
+                    this.closeResultsView();
+                    break;
+                }
                 this.store.dispatch(actions.clearSelection());
                 this.setTool('select');
                 break;
@@ -1295,6 +1626,110 @@ class BeamPathOptimizerApp {
     }
 
     /**
+     * Calculate distance from a point to a line segment
+     * @returns {number} Distance in world units
+     */
+    pointToSegmentDistance(px, py, x1, y1, x2, y2) {
+        const A = px - x1;
+        const B = py - y1;
+        const C = x2 - x1;
+        const D = y2 - y1;
+
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        let param = -1;
+
+        if (lenSq !== 0) {
+            param = dot / lenSq;
+        }
+
+        let xx, yy;
+
+        if (param < 0) {
+            xx = x1;
+            yy = y1;
+        } else if (param > 1) {
+            xx = x2;
+            yy = y2;
+        } else {
+            xx = x1 + param * C;
+            yy = y1 + param * D;
+        }
+
+        const dx = px - xx;
+        const dy = py - yy;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    /**
+     * Get beam segment at world position (within threshold)
+     * @returns {BeamSegment | null}
+     */
+    getSegmentAtPosition(x, y, threshold = 8) {
+        const state = this.store.getState();
+        const segments = state.beamPath.getAllSegments();
+        const components = state.components;
+        const zoom = state.ui.viewport.zoom;
+
+        // Adjust threshold based on zoom
+        const adjustedThreshold = threshold / zoom;
+
+        let closestSegment = null;
+        let closestDistance = Infinity;
+
+        for (const segment of segments) {
+            const source = components.get(segment.sourceId);
+            const target = components.get(segment.targetId);
+            if (!source || !target) continue;
+
+            const dist = this.pointToSegmentDistance(
+                x, y,
+                source.position.x, source.position.y,
+                target.position.x, target.position.y
+            );
+
+            if (dist < adjustedThreshold && dist < closestDistance) {
+                closestDistance = dist;
+                closestSegment = segment;
+            }
+        }
+
+        return closestSegment;
+    }
+
+    /**
+     * Get all beam segments within a bounding box
+     * @returns {string[]} Array of segment IDs
+     */
+    getSegmentsInBox(box) {
+        const state = this.store.getState();
+        const segments = state.beamPath.getAllSegments();
+        const components = state.components;
+        const selected = [];
+
+        const minX = Math.min(box.startX, box.endX);
+        const maxX = Math.max(box.startX, box.endX);
+        const minY = Math.min(box.startY, box.endY);
+        const maxY = Math.max(box.startY, box.endY);
+
+        for (const segment of segments) {
+            const source = components.get(segment.sourceId);
+            const target = components.get(segment.targetId);
+            if (!source || !target) continue;
+
+            // Check if segment midpoint is in box (simple check)
+            const midX = (source.position.x + target.position.x) / 2;
+            const midY = (source.position.y + target.position.y) / 2;
+
+            if (midX >= minX && midX <= maxX && midY >= minY && midY <= maxY) {
+                selected.push(segment.id);
+            }
+        }
+
+        return selected;
+    }
+
+    /**
      * Get all components within a bounding box
      */
     getComponentsInBox(box) {
@@ -1315,6 +1750,148 @@ class BeamPathOptimizerApp {
         }
 
         return selected;
+    }
+
+    /**
+     * Validate if component movement maintains valid beam constraints
+     * @param {Map} originalPositions - Map of component IDs to their original positions
+     * @returns {{ valid: boolean, error: string | null }}
+     */
+    validateMovementForBeamConstraints(originalPositions) {
+        const state = this.store.getState();
+        const beamPath = state.beamPath;
+        const components = state.components;
+
+        // For each moved component, check if any connected beams are now invalid
+        for (const [compId, origPos] of originalPositions) {
+            const comp = components.get(compId);
+            if (!comp) continue;
+
+            // Check incoming beam segments
+            const incomingSegments = beamPath.getIncomingSegments(compId);
+            for (const segment of incomingSegments) {
+                const sourceComp = components.get(segment.sourceId);
+                if (!sourceComp) continue;
+
+                // Calculate new beam angle from source to target
+                const newAngle = BeamPhysics.calculateBeamAngle(sourceComp.position, comp.position);
+                if (newAngle === null) continue;
+
+                // Get expected output angle from source
+                let incomingAngleToSource = null;
+                if (sourceComp.type === 'source') {
+                    incomingAngleToSource = sourceComp.emissionAngle || 0;
+                } else {
+                    // Get from upstream segment
+                    const sourceIncoming = beamPath.getIncomingSegments(sourceComp.id);
+                    if (sourceIncoming.length > 0) {
+                        const upstreamSource = components.get(sourceIncoming[0].sourceId);
+                        if (upstreamSource) {
+                            incomingAngleToSource = BeamPhysics.calculateBeamAngle(upstreamSource.position, sourceComp.position);
+                        }
+                    }
+                }
+
+                if (incomingAngleToSource !== null) {
+                    const expectedAngle = BeamPhysics.getOutputDirection(sourceComp, incomingAngleToSource, segment.sourcePort);
+                    if (expectedAngle !== null) {
+                        // Calculate deviation
+                        const deviation = Math.abs(BeamPhysics.normalizeAngle(newAngle - expectedAngle));
+                        const normalizedDev = Math.min(deviation, 360 - deviation);
+
+                        // If deviation is too large, reject the move
+                        if (normalizedDev > BeamPhysics.ANGLE_TOLERANCE) {
+                            return {
+                                valid: false,
+                                error: `Movement would break beam connection from ${sourceComp.name} to ${comp.name}. Beam angle deviation: ${normalizedDev.toFixed(1)}°`
+                            };
+                        }
+                    }
+                }
+            }
+
+            // Check outgoing beam segments
+            const outgoingSegments = beamPath.getOutgoingSegments(compId);
+            for (const segment of outgoingSegments) {
+                const targetComp = components.get(segment.targetId);
+                if (!targetComp) continue;
+
+                // Skip if target was also moved (relative position maintained)
+                if (originalPositions.has(segment.targetId)) continue;
+
+                // Calculate new beam angle from source to target
+                const newAngle = BeamPhysics.calculateBeamAngle(comp.position, targetComp.position);
+                if (newAngle === null) continue;
+
+                // Get expected output angle from this component
+                let incomingAngle = null;
+                if (comp.type === 'source') {
+                    incomingAngle = comp.emissionAngle || 0;
+                } else {
+                    const compIncoming = beamPath.getIncomingSegments(comp.id);
+                    if (compIncoming.length > 0) {
+                        const upstreamSource = components.get(compIncoming[0].sourceId);
+                        if (upstreamSource) {
+                            incomingAngle = BeamPhysics.calculateBeamAngle(upstreamSource.position, comp.position);
+                        }
+                    }
+                }
+
+                if (incomingAngle !== null) {
+                    const expectedAngle = BeamPhysics.getOutputDirection(comp, incomingAngle, segment.sourcePort);
+                    if (expectedAngle !== null) {
+                        const deviation = Math.abs(BeamPhysics.normalizeAngle(newAngle - expectedAngle));
+                        const normalizedDev = Math.min(deviation, 360 - deviation);
+
+                        if (normalizedDev > BeamPhysics.ANGLE_TOLERANCE) {
+                            return {
+                                valid: false,
+                                error: `Movement would break beam connection from ${comp.name} to ${targetComp.name}. Beam angle deviation: ${normalizedDev.toFixed(1)}°`
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        return { valid: true, error: null };
+    }
+
+    /**
+     * Show a warning toast for movement constraint violation
+     */
+    showMovementWarning(message) {
+        // Create toast element if it doesn't exist
+        let toast = document.getElementById('movement-warning-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'movement-warning-toast';
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 80px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: #ef4444;
+                color: white;
+                padding: 12px 24px;
+                border-radius: 8px;
+                font-size: 14px;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            `;
+            document.body.appendChild(toast);
+        }
+
+        // Show the toast
+        toast.textContent = message;
+        toast.style.opacity = '1';
+
+        // Hide after 4 seconds
+        setTimeout(() => {
+            toast.style.opacity = '0';
+        }, 4000);
     }
 
     /**
@@ -1454,7 +2031,7 @@ class BeamPathOptimizerApp {
     }
 
     /**
-     * Delete selected components or zones
+     * Delete selected components, zones, or beam segments
      */
     deleteSelected() {
         const state = this.store.getState();
@@ -1475,6 +2052,16 @@ class BeamPathOptimizerApp {
                 const id = zoneId.replace('keepout:', '');
                 this.store.dispatch(actions.deleteKeepOutZone(id));
             }
+        }
+
+        // Delete selected beam segments
+        if (state.ui.selection.type === 'segment') {
+            const segmentIds = state.ui.selection.selectedSegmentIds || [];
+            segmentIds.forEach(id => {
+                this.store.dispatch(actions.deleteBeamSegment(id));
+            });
+            // Clear selection after deletion
+            this.store.dispatch(actions.clearSelection());
         }
     }
 
@@ -1582,6 +2169,24 @@ class BeamPathOptimizerApp {
                     throw new Error('Invalid file format: missing formatVersion');
                 }
 
+                // Check for version migration
+                const currentVersion = APP_VERSION.toFileFormat();
+                const fileVersion = json.formatVersion;
+
+                if (needsMigration(fileVersion, currentVersion)) {
+                    const shouldMigrate = confirm(
+                        `This file was created with an older version (${fileVersion}).\n\n` +
+                        `Current version: ${currentVersion}\n\n` +
+                        `Would you like to update it to the current format?\n` +
+                        `(Your original file will not be modified until you save)`
+                    );
+
+                    if (shouldMigrate) {
+                        console.log(`Migrating file from ${fileVersion} to ${currentVersion}`);
+                        json.formatVersion = currentVersion;
+                    }
+                }
+
                 // Reconstruct components as a Map
                 const components = new Map();
                 if (json.components && Array.isArray(json.components)) {
@@ -1668,7 +2273,8 @@ class BeamPathOptimizerApp {
         const state = this.store.getState();
 
         const document = {
-            formatVersion: '1.0.0',
+            formatVersion: APP_VERSION.toFileFormat(),
+            appVersion: APP_VERSION.toString(),
             document: state.document,
             workspace: state.constraints.workspace,
             components: Array.from(state.components.values()).map(c => c.toJSON()),
@@ -1730,11 +2336,27 @@ class BeamPathOptimizerApp {
         const noSelection = document.getElementById('no-selection');
         const componentProps = document.getElementById('component-properties');
         const zoneProps = document.getElementById('zone-properties');
+        const selectionSection = document.getElementById('selection-info');
+        const optimizerSection = document.getElementById('optimizer-section');
 
-        // Hide all panels first
+        // Hide all property panels first
         noSelection.classList.add('hidden');
         componentProps.classList.add('hidden');
         zoneProps.classList.add('hidden');
+
+        // Toggle between properties and optimizer sections
+        const hasSelection = (selectionType === 'component' && selectedId && state.components.has(selectedId)) ||
+                             (selectionType === 'zone' && selectedZoneId);
+
+        if (hasSelection) {
+            // Show properties section, hide optimizer
+            selectionSection.classList.remove('hidden');
+            optimizerSection.classList.add('hidden');
+        } else {
+            // Show optimizer section, hide properties
+            selectionSection.classList.add('hidden');
+            optimizerSection.classList.remove('hidden');
+        }
 
         if (selectionType === 'component' && selectedId && state.components.has(selectedId)) {
             // Show component properties
@@ -1752,6 +2374,7 @@ class BeamPathOptimizerApp {
             document.getElementById('prop-width').value = component.size.width;
             document.getElementById('prop-height').value = component.size.height;
             document.getElementById('prop-fixed').checked = component.isFixed;
+            document.getElementById('prop-angle-fixed').checked = component.isAngleFixed;
 
             // Reflectance (only for relevant components)
             const opticalProps = document.getElementById('optical-properties');
@@ -1901,7 +2524,20 @@ class BeamPathOptimizerApp {
      * Render the canvas
      */
     render() {
-        this.renderer.render(this.store.getState());
+        const state = this.store.getState();
+
+        // Check if we're in preview mode or split-screen mode
+        if (this.isSplitScreenMode && this.previewSnapshot) {
+            // Split-screen comparison: original vs selected
+            const originalLayout = this.optimizer.getOriginalLayout();
+            this.renderer.renderComparison(state, originalLayout, this.previewSnapshot);
+        } else if (this.previewSnapshot) {
+            // Preview mode: show snapshot with indicator
+            this.renderer.renderPreview(state, this.previewSnapshot);
+        } else {
+            // Normal rendering
+            this.renderer.render(state);
+        }
     }
 }
 

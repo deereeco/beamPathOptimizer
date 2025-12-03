@@ -57,6 +57,17 @@ export function normalizeAngle(angle) {
 }
 
 /**
+ * Normalize an angle difference to -180..180 range
+ * This represents the shortest angular distance between two angles
+ */
+export function normalizeAngleDiff(angle) {
+    angle = angle % 360;
+    if (angle > 180) angle -= 360;
+    if (angle < -180) angle += 360;
+    return angle;
+}
+
+/**
  * Convert degrees to radians
  */
 export function degToRad(degrees) {
@@ -303,16 +314,23 @@ export function isTargetOnBeamPath(sourcePos, targetPos, expectedAngle, toleranc
 
 /**
  * Check if a beam can hit a transmission component (lens, waveplate, filter)
- * Beam must be roughly perpendicular to the component's surface
+ * Beam must pass through along the optical axis (parallel to component angle)
+ *
+ * For a lens at angle 0° (standing vertical, thin horizontally):
+ *   - Optical axis is horizontal (0°/180°)
+ *   - Beam should come from left or right
+ * For a lens at angle 90° (laying flat, thin vertically):
+ *   - Optical axis is vertical (90°/270°)
+ *   - Beam should come from top or bottom
  */
 export function canTransmissionComponentAccept(componentAngle, beamAngle, tolerance = ANGLE_TOLERANCE) {
-    // Component surface is along the component angle
-    // Beam should be perpendicular to surface (parallel to normal)
-    const normalAngle = normalizeAngle(componentAngle + 90);
+    // The optical axis is along the component angle (the thin dimension)
+    // Beam should be parallel to the optical axis (can come from either direction)
+    const opticalAxis = normalizeAngle(componentAngle);
 
-    // Beam can come from either direction along the normal
-    const diff1 = Math.abs(normalizeAngle(beamAngle - normalAngle));
-    const diff2 = Math.abs(normalizeAngle(beamAngle - normalAngle - 180));
+    // Beam can come from either direction along the optical axis
+    const diff1 = Math.abs(normalizeAngle(beamAngle - opticalAxis));
+    const diff2 = Math.abs(normalizeAngle(beamAngle - opticalAxis - 180));
 
     const adjustedDiff1 = Math.min(diff1, 360 - diff1);
     const adjustedDiff2 = Math.min(diff2, 360 - diff2);
@@ -381,10 +399,10 @@ export function validateConnection(sourceComp, targetComp, sourcePort, incomingB
     // 3. Check if target can accept beam from this direction
     const beamAngle = calculateBeamAngle(sourceComp.position, targetComp.position);
 
-    // For transmission components, check perpendicularity (skip if target has relaxed constraints)
+    // For transmission components, check that beam is along optical axis (skip if target has relaxed constraints)
     if (!targetRelaxed && [ComponentType.LENS, ComponentType.WAVEPLATE, ComponentType.FILTER].includes(targetComp.type)) {
         if (!canTransmissionComponentAccept(targetComp.angle, beamAngle, tolerance)) {
-            result.error = `Beam must be perpendicular to ${targetComp.name}'s surface`;
+            result.error = `Beam must pass through ${targetComp.name} along its optical axis`;
             return result;
         }
     }
@@ -520,6 +538,7 @@ export default {
     VALID_ANGLES_BY_TYPE,
     ANGLE_TOLERANCE,
     normalizeAngle,
+    normalizeAngleDiff,
     degToRad,
     radToDeg,
     normalizeVector,

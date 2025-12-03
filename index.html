@@ -12,6 +12,7 @@
         <header id="toolbar">
             <div class="toolbar-left">
                 <span class="app-title">Beam Path Optimizer</span>
+                <span class="version-badge" id="app-version">V1.0</span>
             </div>
             <div class="toolbar-center">
                 <button id="btn-new" class="toolbar-btn" title="New Project">New</button>
@@ -47,9 +48,9 @@
                             <span class="tool-icon">&#9995;</span>
                             <span class="tool-label">Pan</span>
                         </button>
-                        <button class="tool-btn" data-tool="connect" title="Connect Beam (C)">
+                        <button class="tool-btn" data-tool="connect" title="Add Laser Beams (C)">
                             <span class="tool-icon">&#10132;</span>
-                            <span class="tool-label">Connect</span>
+                            <span class="tool-label">Add Beams</span>
                         </button>
                     </div>
                 </section>
@@ -92,11 +93,11 @@
                     <h3>Zones</h3>
                     <div class="tool-group">
                         <button class="tool-btn" data-tool="keepout" title="Draw Keep-Out Zone">
-                            <span class="tool-icon zone-keepout"></span>
+                            <span class="tool-icon zone-keepout">&#9634;</span>
                             <span class="tool-label">Keep-Out</span>
                         </button>
                         <button class="tool-btn" data-tool="mounting" title="Define Mounting Zone">
-                            <span class="tool-icon zone-mount"></span>
+                            <span class="tool-icon zone-mount">&#9634;</span>
                             <span class="tool-label">Mount Zone</span>
                         </button>
                     </div>
@@ -163,6 +164,11 @@
                             <label class="property-label">Fixed Position</label>
                             <input type="checkbox" id="prop-fixed">
                             <span class="checkbox-hint">Locked from optimizer</span>
+                        </div>
+                        <div class="property-group">
+                            <label class="property-label">Fixed Angle</label>
+                            <input type="checkbox" id="prop-angle-fixed">
+                            <span class="checkbox-hint">Angle locked from optimizer</span>
                         </div>
                         <div class="property-group mount-zone-group">
                             <label class="property-label">Mount Zone</label>
@@ -333,6 +339,7 @@
                         <div class="optimizer-buttons hidden" id="opt-buttons-finished">
                             <button id="btn-accept-optimize" class="action-btn primary">Accept</button>
                             <button id="btn-revert-optimize" class="action-btn danger">Revert</button>
+                            <button id="btn-view-results" class="action-btn">View Results</button>
                         </div>
                         <div id="optimizer-progress" class="hidden">
                             <progress id="opt-progress-bar" max="100" value="0"></progress>
@@ -355,6 +362,36 @@
                                     <span class="opt-stat-value" id="opt-penalty">0</span>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Results View Section -->
+                <section class="panel-section hidden" id="results-section">
+                    <h3>Optimization Results</h3>
+                    <div class="results-view-container">
+                        <canvas id="results-graph" width="280" height="180"></canvas>
+                        <div class="results-info">
+                            <div class="results-tooltip" id="results-tooltip">
+                                Hover over graph to see iteration details
+                            </div>
+                            <div class="results-selected" id="results-selected">
+                                <span class="results-selected-label">Selected:</span>
+                                <span class="results-selected-value" id="selected-iteration-info">None</span>
+                            </div>
+                        </div>
+                        <div class="results-actions">
+                            <button id="btn-preview-selected" class="action-btn" disabled>Preview Selected</button>
+                            <button id="btn-apply-selected" class="action-btn primary" disabled>Apply This Layout</button>
+                        </div>
+                        <div class="results-options">
+                            <label class="results-checkbox">
+                                <input type="checkbox" id="results-split-screen">
+                                <span>Split-screen comparison</span>
+                            </label>
+                        </div>
+                        <div class="results-close">
+                            <button id="btn-close-results" class="action-btn">Close Results View</button>
                         </div>
                     </div>
                 </section>

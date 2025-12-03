@@ -257,3 +257,191 @@ Key variables in `:root` (css/styles.css):
 - **Rendering**: Immediate mode canvas rendering, re-renders on state change
 - **Component detection**: Uses `containsPoint()` method for hit testing
 - **Optimizer runs async**: Uses `requestAnimationFrame` for non-blocking updates
+
+---
+
+## Feature Implementation Progress
+
+### Phase 1: Optimizer Features - COMPLETED
+- [x] **Fixed Angle Checkbox**: Added `isAngleFixed` property to components, checkbox in UI, prevents angle changes during optimization
+- [x] **Angle Optimization**: Optimizer now changes component angles in 90-degree increments from initial angle
+- [x] **Beam Collision Detection**: Added `calculateBeamCollisionPenalty()` - beams cannot pass through other components or keep-out zones (penalty: 1500 per collision)
+- [x] **Post-Optimization Selection Clear**: Selection is cleared after optimization completes to keep optimizer buttons visible
+
+### Phase 2: General UI Features - COMPLETED
+- [x] **Zone Icons**: Added box icons (&#9634;) to Keep-Out and Mount Zone buttons
+- [x] **Right Panel Layout**: Panel now shows EITHER properties OR optimizer section, never both
+- [x] **Default Angles**: Components now default to 0 degrees (sources, lenses, etc.) or 45 degrees (mirrors, beam splitters) via `DEFAULT_ANGLES` constant
+- [x] **Source Emission Direction**: Sources rotate based on `emissionAngle` - the pointy end now faces the emission direction
+- [x] **Movement Constraints**: Moving components that would break beam angle constraints is blocked, components snap back with warning toast
+
+### Phase 3: Beam Tools - COMPLETED
+- [x] **Rename Connect Tool**: Changed from "Connect" to "Add Beams" in UI
+- [x] **Beam Segment Selection**: Click on beam segments in connect mode to select them (Ctrl+click for multi-select)
+- [x] **Beam Segment Box Selection**: Drag selection box in connect mode to select multiple segments
+- [x] **Beam Segment Deletion**: Press Delete/Backspace to delete selected beam segments
+- [x] **Segment Highlighting**: Selected segments show blue glow, hovered segments show lighter glow
+
+### Phase 4: Version Control - COMPLETED
+- [x] **Version Display**: Version badge (V1.0) shown in top left toolbar
+- [x] **Version Tracking**: `APP_VERSION` constant in state.js with `toString()` and `toFileFormat()` methods
+- [x] **Version Comparison**: `compareVersions()` and `needsMigration()` utilities added
+- [x] **File Format**: Save files now include `formatVersion` and `appVersion`
+- [x] **Migration Prompt**: When opening older files, user is prompted to update to current version
+
+### Files Modified
+| File | Changes |
+|------|---------|
+| `js/models/Component.js` | `isAngleFixed` property, `DEFAULT_ANGLES` constant |
+| `js/optimization/Optimizer.js` | Angle tracking maps, `angleMovableIds`, `performAngleIteration()` |
+| `js/optimization/CostFunction.js` | `calculateBeamCollisionPenalty()` with line-segment intersection |
+| `js/main.js` | UI bindings, version display, file version handling, panel toggling, movement constraints (`validateMovementForBeamConstraints()`, `showMovementWarning()`), segment selection (`getSegmentAtPosition()`, `getSegmentsInBox()`) |
+| `js/state.js` | `APP_VERSION`, `compareVersions()`, `needsMigration()`, segment selection actions (`SELECT_SEGMENT`, `SELECT_MULTIPLE_SEGMENTS`) |
+| `js/render/Renderer.js` | Source emission direction fix (rotate by `emissionAngle`), segment highlighting (selected/hovered glow) |
+| `index.html` | Version badge, zone icons, tool rename, Fixed Angle checkbox |
+| `css/styles.css` | `.version-badge` styling |
+
+### All Features Complete
+All features from `Features to Add.txt` have been implemented across 4 phases.
+
+---
+
+## Phase 5: Constrained Optimizer & Results View - COMPLETED
+
+### Problem Statement (Solved)
+The previous optimizer had issues:
+1. ~~Beams become diagonal when they should remain at proper angles~~ ✅ Fixed
+2. ~~Relative beam angles not preserved when components move/rotate~~ ✅ Fixed
+3. ~~No visibility into optimization~~ ✅ Fixed with Results View
+
+### Core Constraint (Implemented)
+> "Components should be able to move anywhere and rotate as long as the initial input and output angles of each component with respect to the beam is preserved."
+
+**Implementation:**
+```
+BEFORE:                           AFTER (valid):
+    beam at 0° (right)               beam at 90° (down)
+         →                                ↓
+        [M] mirror at 45°               [M] mirror at 135°
+         ↓                                →
+    beam at 90° (down)               beam at 0° (right)
+
+Input angle relative to mirror: 45°   Input angle relative to mirror: 45° ✓
+Output angle relative to mirror: 45°  Output angle relative to mirror: 45° ✓
+```
+
+The optimizer now calculates and stores **relative beam angles** at initialization and preserves them throughout optimization.
+
+### Feature 1: Constrained Optimizer
+
+#### Key Algorithms
+
+**Relative Angle Calculation** (at init):
+```javascript
+For each component in beam path:
+  relativeInputAngle = incomingBeamAngle - componentAngle
+  For each output port:
+    relativeOutputAngle = outputBeamAngle - componentAngle
+  Store in relativeBeamAngles Map
+```
+
+**Constrained Position Move** (performIteration):
+```javascript
+1. Pick random segment to adjust
+2. Calculate new target position
+3. Option A: Translate all downstream components by same displacement
+4. Option B: Rotate downstream components around moved component
+5. Evaluate cost for both options
+6. Pick lower cost option
+7. Apply SA acceptance criteria
+```
+
+**Constrained Angle Move** (performAngleIteration):
+```javascript
+1. Pick random component, new angle (90° increment)
+2. For each output port:
+   newOutputAngle = newComponentAngle + relativeOutputAngle
+   Move target along new direction (preserve segment length)
+   Recursively adjust downstream via repositionDownstreamForRotation()
+3. Apply SA acceptance criteria
+```
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `js/physics/BeamPhysics.js` | Added `normalizeAngleDiff()` utility |
+| `js/optimization/Optimizer.js` | Added `relativeBeamAngles` Map, `calculateRelativeBeamAngles()`, `tryMoveWithTranslation()`, `tryMoveWithRotation()`, `repositionDownstreamForRotation()`, snapshot storage |
+
+### Feature 2: Results View Mode
+
+#### Implementation
+- **Snapshot Storage**: Captures state every 10 iterations
+- **Graph Component**: Canvas-based cost vs iteration graph with hover/click/double-click interactions
+- **Preview Mode**: View any iteration's layout without modifying actual state
+- **Split-Screen Comparison**: Toggle to see original vs selected side-by-side
+- **Apply Workflow**: Apply any iteration, not just the best
+
+#### User Interaction Flow
+```
+1. Run optimization
+2. Click "View Results" after optimization completes
+3. Hover over graph → tooltip shows iteration/cost
+4. Click on graph → selects that iteration
+5. Double-click → preview that layout on canvas (with yellow indicator)
+6. "Preview Selected" button → also enters preview mode
+7. "Apply This Layout" → applies selected snapshot permanently
+8. Split-screen checkbox → shows original vs selected side-by-side
+9. Press Escape → exit preview mode
+10. "Close Results View" → return to normal mode
+```
+
+#### UI Components
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Optimization Results                                               │
+├─────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  Cost vs Iteration Graph (canvas)                            │  │
+│  │  - Red line connecting points                                │  │
+│  │  - Yellow marker for BEST iteration                          │  │
+│  │  - Green marker for selected iteration                       │  │
+│  │  - Orange marker for hovered point                           │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  Hover: "Iteration 1523, Cost: 1234.5"                             │
+│  Selected: Iteration 1523 (Cost: 1234.5)                           │
+│                                                                     │
+│  [Preview Selected] [Apply This Layout]                            │
+│                                                                     │
+│  ☐ Split-screen comparison                                         │
+│                                                                     │
+│  [Close Results View]                                              │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### Files Modified/Created
+
+| File | Changes |
+|------|---------|
+| `js/render/ResultsGraph.js` | **NEW** - Canvas graph with hover/click/dblclick, best marker |
+| `js/render/Renderer.js` | Added `renderPreview()`, `renderComparison()`, `drawPreviewIndicator()` |
+| `js/optimization/Optimizer.js` | Added `snapshots[]`, `originalLayout`, `captureSnapshot()`, `getSnapshots()`, `getOriginalLayout()`, `getBestSnapshot()`, `applySnapshot()` |
+| `js/main.js` | Added results view state, `setupResultsViewControls()`, `openResultsView()`, `closeResultsView()`, preview/apply methods, updated `render()` for preview modes |
+| `index.html` | Added results section with graph canvas, buttons, split-screen checkbox |
+| `css/styles.css` | Added results view styling, split-screen overlay, preview indicator |
+
+### All Phase 5 Features Complete ✅
+
+| Feature | Status |
+|---------|--------|
+| Relative angle calculation | ✅ Implemented |
+| Constrained position moves | ✅ Implemented |
+| Constrained angle moves | ✅ Implemented |
+| Snapshot storage | ✅ Every 10 iterations |
+| Results graph UI | ✅ Canvas-based |
+| Hover/click/double-click | ✅ Full interaction |
+| Preview mode | ✅ With yellow indicator |
+| Split-screen comparison | ✅ Original vs Selected |
+| Apply any iteration | ✅ No warning |
+| Escape to exit preview | ✅ Keyboard support |

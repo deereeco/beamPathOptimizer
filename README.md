@@ -41,6 +41,17 @@ The optimizer respects all constraints:
 - Fixed components stay in place
 - Grid snapping is applied per-component
 - Fixed path lengths are maintained
+- **Relative beam angles are preserved** - When components move or rotate, their input/output beam angles relative to their own orientation are maintained
+
+### Results View
+After optimization completes, click "View Results" to explore the optimization history:
+- **Cost vs Iteration Graph** - Visual timeline of the optimization process
+- **Hover** - See iteration number and cost for any point
+- **Click** - Select an iteration to inspect
+- **Double-click** - Preview that iteration's layout on the canvas
+- **Apply This Layout** - Apply any iteration, not just the best
+- **Split-screen comparison** - Toggle to see original vs selected side-by-side
+- **Press Escape** - Exit preview mode and return to current layout
 
 ### Zones
 - **Mounting Zone** - Target area for center of mass (green)
@@ -73,7 +84,19 @@ The optimizer respects all constraints:
 2. Set any components as "Fixed" that shouldn't move
 3. Adjust optimization weights (CoM, Footprint, Path Length)
 4. Click "Start" to begin optimization
-5. Click "Apply" to keep results or "Revert" to undo
+5. When complete, choose:
+   - **Accept** - Apply the best result found
+   - **Revert** - Undo all changes
+   - **View Results** - Explore the optimization history
+
+### Using Results View
+1. After optimization, click "View Results"
+2. The graph shows cost vs iteration - lower is better
+3. Hover over points to see details
+4. Click to select, double-click to preview on canvas
+5. Use split-screen checkbox to compare original vs selected
+6. Click "Apply This Layout" to apply any iteration you like
+7. Press Escape or "Close Results View" to exit
 
 ### Keyboard Shortcuts
 - `Delete` / `Backspace` - Delete selected component
@@ -88,6 +111,8 @@ The optimizer respects all constraints:
 ```
 beamPathOptimizer/
 ├── index.html              # Main HTML file
+├── README.md               # This file
+├── claude.md               # Developer reference documentation
 ├── css/
 │   └── styles.css          # Application styles
 └── js/
@@ -99,10 +124,11 @@ beamPathOptimizer/
     ├── physics/
     │   └── BeamPhysics.js  # Beam physics calculations
     ├── optimization/
-    │   ├── Optimizer.js    # Simulated annealing optimizer
+    │   ├── Optimizer.js    # Simulated annealing optimizer (with constrained moves)
     │   └── CostFunction.js # Cost function calculations
     └── render/
-        └── Renderer.js     # Canvas rendering
+        ├── Renderer.js     # Canvas rendering (includes preview modes)
+        └── ResultsGraph.js # Optimization results graph visualization
 ```
 
 ## Technical Details

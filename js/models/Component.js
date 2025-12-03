@@ -30,6 +30,21 @@ export const VALID_ANGLES = {
 };
 
 /**
+ * Default angles per component type
+ * - Mirrors and beam splitters default to 45 degrees
+ * - All other components default to 0 degrees
+ */
+export const DEFAULT_ANGLES = {
+    [ComponentType.SOURCE]: 0,
+    [ComponentType.MIRROR]: 45,
+    [ComponentType.BEAM_SPLITTER]: 45,
+    [ComponentType.LENS]: 0,
+    [ComponentType.WAVEPLATE]: 0,
+    [ComponentType.FILTER]: 0,
+    [ComponentType.DETECTOR]: 0
+};
+
+/**
  * Default properties for each component type
  * Mount zone properties:
  *   - enabled: whether the mount zone is active
@@ -138,7 +153,7 @@ export class Component {
 
         // Position and orientation
         this.position = props.position || { x: 0, y: 0 };
-        this.angle = props.angle ?? 45;
+        this.angle = props.angle ?? DEFAULT_ANGLES[props.type] ?? 0;
 
         // Physical properties
         this.size = props.size || { ...defaults.size };
@@ -153,6 +168,7 @@ export class Component {
 
         // Constraints
         this.isFixed = props.isFixed || false;
+        this.isAngleFixed = props.isAngleFixed || false;
 
         // Mount zone (keep-out zone for the component's physical mount)
         const defaultMountZone = defaults.mountZone || { enabled: false, padding: 10 };
@@ -530,7 +546,7 @@ export class Component {
      */
     update(props) {
         const updatableProps = ['name', 'position', 'angle', 'size', 'mass',
-                                'reflectance', 'transmittance', 'isFixed', 'notes', 'mountZone',
+                                'reflectance', 'transmittance', 'isFixed', 'isAngleFixed', 'notes', 'mountZone',
                                 'emissionAngle', 'isShallowAngle', 'shallowAngle', 'snapToGrid',
                                 'allowAnyAngle', 'pathConstraints'];
 
@@ -576,6 +592,7 @@ export class Component {
             reflectance: this.reflectance,
             transmittance: this.transmittance,
             isFixed: this.isFixed,
+            isAngleFixed: this.isAngleFixed,
             mountZone: { ...this.mountZone },
             // Beam physics properties
             emissionAngle: this.emissionAngle,

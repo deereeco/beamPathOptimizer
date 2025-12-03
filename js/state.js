@@ -6,6 +6,52 @@ import { Component, ComponentType } from './models/Component.js';
 import { BeamPath } from './models/BeamPath.js';
 
 /**
+ * Application version
+ * Format: V{major}.{minor}
+ * Minor increments for each release, resets to 0 and major++ when minor reaches 100
+ */
+export const APP_VERSION = {
+    major: 1,
+    minor: 0,
+    toString() {
+        return `V${this.major}.${this.minor}`;
+    },
+    toFileFormat() {
+        return `${this.major}.${this.minor}.0`;
+    }
+};
+
+/**
+ * Compare two version strings
+ * @returns {number} -1 if a < b, 0 if equal, 1 if a > b
+ */
+export function compareVersions(a, b) {
+    const parseVersion = (v) => {
+        const match = v.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
+        if (!match) return { major: 0, minor: 0, patch: 0 };
+        return {
+            major: parseInt(match[1], 10),
+            minor: parseInt(match[2], 10),
+            patch: parseInt(match[3] || '0', 10)
+        };
+    };
+
+    const va = parseVersion(a);
+    const vb = parseVersion(b);
+
+    if (va.major !== vb.major) return va.major - vb.major;
+    if (va.minor !== vb.minor) return va.minor - vb.minor;
+    return va.patch - vb.patch;
+}
+
+/**
+ * Check if file needs migration
+ */
+export function needsMigration(fileVersion, currentVersion) {
+    return compareVersions(fileVersion, currentVersion) < 0;
+}
+
+/**
  * Action types
  */
 export const ActionType = {
@@ -29,6 +75,8 @@ export const ActionType = {
     SELECT_COMPONENT: 'SELECT_COMPONENT',
     SELECT_MULTIPLE: 'SELECT_MULTIPLE',
     SELECT_ZONE: 'SELECT_ZONE',
+    SELECT_SEGMENT: 'SELECT_SEGMENT',
+    SELECT_MULTIPLE_SEGMENTS: 'SELECT_MULTIPLE_SEGMENTS',
     CLEAR_SELECTION: 'CLEAR_SELECTION',
 
     // Zone actions
@@ -96,11 +144,13 @@ export function createInitialState() {
                 zoom: 1.0
             },
             selection: {
-                type: null,           // 'component' | 'zone' | null
+                type: null,           // 'component' | 'zone' | 'segment' | null
                 selectedIds: [],      // component IDs when type='component'
                 selectedZoneId: null, // zone ID when type='zone' (format: 'keepout:id' or 'mounting')
+                selectedSegmentIds: [], // beam segment IDs when type='segment'
                 hoveredId: null,
-                hoveredZoneId: null
+                hoveredZoneId: null,
+                hoveredSegmentId: null
             },
             selectionBox: null,       // { startX, startY, endX, endY } for drag selection
             placingComponent: null, // Component type being placed
@@ -572,6 +622,34 @@ export function reducer(state, action) {
             break;
         }
 
+        case ActionType.SELECT_SEGMENT: {
+            newState.ui = {
+                ...state.ui,
+                selection: {
+                    ...state.ui.selection,
+                    type: action.segmentId ? 'segment' : null,
+                    selectedIds: [],
+                    selectedZoneId: null,
+                    selectedSegmentIds: action.segmentId ? [action.segmentId] : []
+                }
+            };
+            break;
+        }
+
+        case ActionType.SELECT_MULTIPLE_SEGMENTS: {
+            newState.ui = {
+                ...state.ui,
+                selection: {
+                    ...state.ui.selection,
+                    type: action.segmentIds.length > 0 ? 'segment' : null,
+                    selectedIds: [],
+                    selectedZoneId: null,
+                    selectedSegmentIds: action.segmentIds
+                }
+            };
+            break;
+        }
+
         case ActionType.CLEAR_SELECTION: {
             newState.ui = {
                 ...state.ui,
@@ -579,7 +657,8 @@ export function reducer(state, action) {
                     ...state.ui.selection,
                     type: null,
                     selectedIds: [],
-                    selectedZoneId: null
+                    selectedZoneId: null,
+                    selectedSegmentIds: []
                 },
                 selectionBox: null
             };
@@ -670,6 +749,8 @@ export const actions = {
     selectComponent: (componentId) => ({ type: ActionType.SELECT_COMPONENT, componentId }),
     selectMultiple: (componentIds) => ({ type: ActionType.SELECT_MULTIPLE, componentIds }),
     selectZone: (zoneId) => ({ type: ActionType.SELECT_ZONE, zoneId }),
+    selectSegment: (segmentId) => ({ type: ActionType.SELECT_SEGMENT, segmentId }),
+    selectMultipleSegments: (segmentIds) => ({ type: ActionType.SELECT_MULTIPLE_SEGMENTS, segmentIds }),
     clearSelection: () => ({ type: ActionType.CLEAR_SELECTION }),
 
     setTool: (tool) => ({ type: ActionType.SET_TOOL, tool }),

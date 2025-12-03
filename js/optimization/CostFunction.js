@@ -216,7 +216,7 @@ export function calculatePenalty(components, constraints) {
  */
 export function calculateBeamAnglePenalty(beamPath, components) {
     let penalty = 0;
-    const ANGLE_PENALTY_MULTIPLIER = 500;  // Per degree of deviation
+    const ANGLE_PENALTY_MULTIPLIER = 5000;  // High penalty to enforce beam geometry
 
     const componentMap = new Map();
     components.forEach(c => componentMap.set(c.id, c));
@@ -313,6 +313,157 @@ export function calculateFixedLengthPenalty(beamPath, components) {
 }
 
 /**
+ * Calculate penalty for beam paths that pass through components or keep-out zones
+ * Beams can cross each other (themselves), but cannot pass through solid objects
+ */
+export function calculateBeamCollisionPenalty(beamPath, components, constraints) {
+    let penalty = 0;
+    const COLLISION_PENALTY_MULTIPLIER = 1500;
+
+    const componentMap = new Map();
+    components.forEach(c => componentMap.set(c.id, c));
+
+    const segments = beamPath.getAllSegments();
+
+    for (const segment of segments) {
+        const source = componentMap.get(segment.sourceId);
+        const target = componentMap.get(segment.targetId);
+
+        if (!source || !target) continue;
+
+        const beamStart = source.position;
+        const beamEnd = target.position;
+
+        // Check collision with other components (not source or target)
+        for (const comp of components) {
+            if (comp.id === segment.sourceId || comp.id === segment.targetId) continue;
+
+            if (lineIntersectsRotatedRect(beamStart, beamEnd, comp)) {
+                penalty += COLLISION_PENALTY_MULTIPLIER;
+            }
+
+            // Also check component's mount zone if enabled
+            if (comp.mountZone && comp.mountZone.enabled) {
+                const mountBounds = comp.getMountZoneBounds();
+                if (mountBounds && lineIntersectsAABB(beamStart, beamEnd, mountBounds)) {
+                    penalty += COLLISION_PENALTY_MULTIPLIER * 0.5;
+                }
+            }
+        }
+
+        // Check collision with keep-out zones
+        for (const zone of constraints.keepOutZones) {
+            if (!zone.isActive) continue;
+
+            const zoneBounds = {
+                minX: zone.bounds.x,
+                minY: zone.bounds.y,
+                maxX: zone.bounds.x + zone.bounds.width,
+                maxY: zone.bounds.y + zone.bounds.height
+            };
+
+            if (lineIntersectsAABB(beamStart, beamEnd, zoneBounds)) {
+                penalty += COLLISION_PENALTY_MULTIPLIER;
+            }
+        }
+    }
+
+    return penalty;
+}
+
+/**
+ * Check if a line segment intersects an axis-aligned bounding box
+ * Uses Liang-Barsky algorithm for efficiency
+ */
+function lineIntersectsAABB(p1, p2, bounds) {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+
+    let tMin = 0;
+    let tMax = 1;
+
+    // Check X bounds
+    if (dx !== 0) {
+        const t1 = (bounds.minX - p1.x) / dx;
+        const t2 = (bounds.maxX - p1.x) / dx;
+        tMin = Math.max(tMin, Math.min(t1, t2));
+        tMax = Math.min(tMax, Math.max(t1, t2));
+    } else if (p1.x < bounds.minX || p1.x > bounds.maxX) {
+        return false;
+    }
+
+    // Check Y bounds
+    if (dy !== 0) {
+        const t1 = (bounds.minY - p1.y) / dy;
+        const t2 = (bounds.maxY - p1.y) / dy;
+        tMin = Math.max(tMin, Math.min(t1, t2));
+        tMax = Math.min(tMax, Math.max(t1, t2));
+    } else if (p1.y < bounds.minY || p1.y > bounds.maxY) {
+        return false;
+    }
+
+    return tMin <= tMax;
+}
+
+/**
+ * Check if a line segment intersects a rotated rectangle (component)
+ */
+function lineIntersectsRotatedRect(p1, p2, component) {
+    // Get the component's bounding box corners
+    const bbox = component.getBoundingBox();
+    const corners = bbox.corners;
+
+    // Check line segment against each edge of the rotated rectangle
+    for (let i = 0; i < 4; i++) {
+        const c1 = corners[i];
+        const c2 = corners[(i + 1) % 4];
+
+        if (lineSegmentsIntersect(p1, p2, c1, c2)) {
+            return true;
+        }
+    }
+
+    // Also check if line is entirely inside the rectangle
+    if (component.containsPoint(p1.x, p1.y) || component.containsPoint(p2.x, p2.y)) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Check if two line segments intersect
+ */
+function lineSegmentsIntersect(p1, p2, p3, p4) {
+    const d1 = direction(p3, p4, p1);
+    const d2 = direction(p3, p4, p2);
+    const d3 = direction(p1, p2, p3);
+    const d4 = direction(p1, p2, p4);
+
+    if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+        ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+        return true;
+    }
+
+    // Check for collinear cases
+    if (d1 === 0 && onSegment(p3, p4, p1)) return true;
+    if (d2 === 0 && onSegment(p3, p4, p2)) return true;
+    if (d3 === 0 && onSegment(p1, p2, p3)) return true;
+    if (d4 === 0 && onSegment(p1, p2, p4)) return true;
+
+    return false;
+}
+
+function direction(pi, pj, pk) {
+    return (pk.x - pi.x) * (pj.y - pi.y) - (pj.x - pi.x) * (pk.y - pi.y);
+}
+
+function onSegment(pi, pj, pk) {
+    return Math.min(pi.x, pj.x) <= pk.x && pk.x <= Math.max(pi.x, pj.x) &&
+           Math.min(pi.y, pj.y) <= pk.y && pk.y <= Math.max(pi.y, pj.y);
+}
+
+/**
  * Calculate total cost with weights
  */
 export function calculateTotalCost(state, weights) {
@@ -320,7 +471,7 @@ export function calculateTotalCost(state, weights) {
     const movableComponents = components.filter(c => !c.isFixed);
 
     if (movableComponents.length === 0) {
-        return { total: 0, com: 0, footprint: 0, pathLength: 0, penalty: 0, beamAngle: 0, fixedLength: 0 };
+        return { total: 0, com: 0, footprint: 0, pathLength: 0, penalty: 0, beamAngle: 0, fixedLength: 0, beamCollision: 0 };
     }
 
     // Calculate center of mass
@@ -347,6 +498,7 @@ export function calculateTotalCost(state, weights) {
     // Beam physics penalties
     const beamAnglePenalty = calculateBeamAnglePenalty(state.beamPath, components);
     const fixedLengthPenalty = calculateFixedLengthPenalty(state.beamPath, components);
+    const beamCollisionPenalty = calculateBeamCollisionPenalty(state.beamPath, components, state.constraints);
 
     // Weighted total (beam physics penalties are added as hard constraints)
     const total = (
@@ -355,7 +507,8 @@ export function calculateTotalCost(state, weights) {
         weights.pathLength * pathLengthCost +
         penalty +
         beamAnglePenalty +
-        fixedLengthPenalty
+        fixedLengthPenalty +
+        beamCollisionPenalty
     );
 
     return {
@@ -365,7 +518,8 @@ export function calculateTotalCost(state, weights) {
         pathLength: pathLengthCost,
         penalty,
         beamAngle: beamAnglePenalty,
-        fixedLength: fixedLengthPenalty
+        fixedLength: fixedLengthPenalty,
+        beamCollision: beamCollisionPenalty
     };
 }
 
@@ -376,5 +530,6 @@ export default {
     calculatePenalty,
     calculateBeamAnglePenalty,
     calculateFixedLengthPenalty,
+    calculateBeamCollisionPenalty,
     calculateTotalCost
 };

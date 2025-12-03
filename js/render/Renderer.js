@@ -419,7 +419,13 @@ export class Renderer {
 
         ctx.save();
         ctx.translate(screen.x, screen.y);
-        ctx.rotate((component.angle * Math.PI) / 180);
+
+        // For sources, rotate based on emissionAngle so the pointy end matches emission direction
+        // For other components, use the regular angle
+        const rotationAngle = component.type === ComponentType.SOURCE
+            ? (component.emissionAngle || 0)
+            : component.angle;
+        ctx.rotate((rotationAngle * Math.PI) / 180);
 
         const halfW = (component.size.width * viewport.zoom) / 2;
         const halfH = (component.size.height * viewport.zoom) / 2;
@@ -534,10 +540,13 @@ export class Renderer {
     /**
      * Draw beam paths
      */
-    drawBeamPaths(beamPath, components, viewport) {
+    drawBeamPaths(beamPath, components, viewport, selection = {}) {
         const ctx = this.ctx;
         const componentMap = new Map();
         components.forEach(c => componentMap.set(c.id, c));
+
+        const selectedSegmentIds = selection.selectedSegmentIds || [];
+        const hoveredSegmentId = selection.hoveredSegmentId;
 
         beamPath.getAllSegments().forEach(segment => {
             const source = componentMap.get(segment.sourceId);
@@ -548,18 +557,53 @@ export class Renderer {
             const startScreen = this.worldToScreen(source.position.x, source.position.y, viewport);
             const endScreen = this.worldToScreen(target.position.x, target.position.y, viewport);
 
-            // Line thickness based on power
-            const thickness = Math.max(1, 3 * segment.power);
+            const isSelected = selectedSegmentIds.includes(segment.id);
+            const isHovered = hoveredSegmentId === segment.id;
 
-            // Color based on validity and branch
+            // Line thickness based on power, but thicker if selected/hovered
+            let thickness = Math.max(1, 3 * segment.power);
+            if (isSelected) thickness += 2;
+            else if (isHovered) thickness += 1;
+
+            // Color based on selection, validity and branch
             let color = segment.color || BRANCH_COLORS[segment.branchIndex % BRANCH_COLORS.length];
 
             // Invalid segment styling
             if (segment.isValid === false) {
                 color = '#ff4444';  // Red for invalid
                 ctx.setLineDash([5, 5]);  // Dashed line
+            } else if (isSelected) {
+                ctx.setLineDash([]);  // Solid line
+            } else if (isHovered) {
+                ctx.setLineDash([]);  // Solid line
             } else {
                 ctx.setLineDash([]);  // Solid line
+            }
+
+            // Draw selection glow for selected segments
+            if (isSelected) {
+                ctx.strokeStyle = this.colors.selection;
+                ctx.lineWidth = thickness + 4;
+                ctx.lineCap = 'round';
+                ctx.globalAlpha = 0.5;
+                ctx.beginPath();
+                ctx.moveTo(startScreen.x, startScreen.y);
+                ctx.lineTo(endScreen.x, endScreen.y);
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+            }
+
+            // Draw hover glow for hovered segments
+            if (isHovered && !isSelected) {
+                ctx.strokeStyle = this.colors.hover;
+                ctx.lineWidth = thickness + 3;
+                ctx.lineCap = 'round';
+                ctx.globalAlpha = 0.4;
+                ctx.beginPath();
+                ctx.moveTo(startScreen.x, startScreen.y);
+                ctx.lineTo(endScreen.x, endScreen.y);
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
             }
 
             ctx.strokeStyle = color;
@@ -779,8 +823,8 @@ export class Renderer {
         this.drawKeepOutZones(constraints.keepOutZones, viewport, selection.selectedZoneId, selection.hoveredZoneId);
         this.drawMountingZone(constraints.mountingZone, viewport, selection.selectedZoneId, selection.hoveredZoneId);
 
-        // Draw beam paths
-        this.drawBeamPaths(beamPath, Array.from(components.values()), viewport);
+        // Draw beam paths (with selection state for highlighting)
+        this.drawBeamPaths(beamPath, Array.from(components.values()), viewport, selection);
 
         // Collect mount zone violations for highlighting
         const mountZoneViolations = new Set();
@@ -819,6 +863,198 @@ export class Renderer {
 
         // Draw axis indicator (always on top, in screen coordinates)
         this.drawAxisIndicator();
+    }
+
+    /**
+     * Render the scene with preview positions/angles from a snapshot.
+     * This temporarily applies snapshot positions for rendering without modifying actual state.
+     */
+    renderPreview(state, snapshot) {
+        if (!snapshot) {
+            this.render(state);
+            return;
+        }
+
+        // Store original positions and angles
+        const savedPositions = new Map();
+        const savedAngles = new Map();
+
+        state.components.forEach((comp, id) => {
+            savedPositions.set(id, { ...comp.position });
+            savedAngles.set(id, comp.angle);
+        });
+
+        // Apply snapshot positions and angles
+        if (snapshot.positions) {
+            snapshot.positions.forEach((pos, id) => {
+                const comp = state.components.get(id);
+                if (comp) comp.position = { ...pos };
+            });
+        }
+        if (snapshot.angles) {
+            snapshot.angles.forEach((angle, id) => {
+                const comp = state.components.get(id);
+                if (comp) comp.angle = angle;
+            });
+        }
+
+        // Render
+        this.render(state);
+
+        // Draw preview mode indicator
+        this.drawPreviewIndicator(snapshot.iteration, snapshot.cost);
+
+        // Restore original positions and angles
+        savedPositions.forEach((pos, id) => {
+            const comp = state.components.get(id);
+            if (comp) comp.position = pos;
+        });
+        savedAngles.forEach((angle, id) => {
+            const comp = state.components.get(id);
+            if (comp) comp.angle = angle;
+        });
+    }
+
+    /**
+     * Render a split-screen comparison between original and selected snapshot.
+     */
+    renderComparison(state, originalSnapshot, selectedSnapshot) {
+        const ctx = this.ctx;
+        const halfWidth = this.width / 2;
+
+        // Save the current context state
+        ctx.save();
+
+        // Left side: Original layout
+        ctx.beginPath();
+        ctx.rect(0, 0, halfWidth, this.height);
+        ctx.clip();
+
+        if (originalSnapshot) {
+            this.renderPreviewInternal(state, originalSnapshot, false);
+        } else {
+            this.render(state);
+        }
+
+        ctx.restore();
+        ctx.save();
+
+        // Right side: Selected snapshot
+        ctx.beginPath();
+        ctx.rect(halfWidth, 0, halfWidth, this.height);
+        ctx.clip();
+
+        // Offset the viewport to compensate for clipping
+        if (selectedSnapshot) {
+            this.renderPreviewInternal(state, selectedSnapshot, false);
+        }
+
+        ctx.restore();
+
+        // Draw divider
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(halfWidth, 0);
+        ctx.lineTo(halfWidth, this.height);
+        ctx.stroke();
+
+        // Draw labels
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+
+        // Left label
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(halfWidth / 2 - 40, 8, 80, 24);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('ORIGINAL', halfWidth / 2, 24);
+
+        // Right label
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(halfWidth + halfWidth / 2 - 40, 8, 80, 24);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('SELECTED', halfWidth + halfWidth / 2, 24);
+    }
+
+    /**
+     * Internal render with snapshot positions (no indicator).
+     */
+    renderPreviewInternal(state, snapshot, showIndicator = false) {
+        if (!snapshot) {
+            this.render(state);
+            return;
+        }
+
+        // Store original positions and angles
+        const savedPositions = new Map();
+        const savedAngles = new Map();
+
+        state.components.forEach((comp, id) => {
+            savedPositions.set(id, { ...comp.position });
+            savedAngles.set(id, comp.angle);
+        });
+
+        // Apply snapshot positions and angles
+        if (snapshot.positions) {
+            snapshot.positions.forEach((pos, id) => {
+                const comp = state.components.get(id);
+                if (comp) comp.position = { ...pos };
+            });
+        }
+        if (snapshot.angles) {
+            snapshot.angles.forEach((angle, id) => {
+                const comp = state.components.get(id);
+                if (comp) comp.angle = angle;
+            });
+        }
+
+        // Render
+        this.render(state);
+
+        if (showIndicator) {
+            this.drawPreviewIndicator(snapshot.iteration, snapshot.cost);
+        }
+
+        // Restore original positions and angles
+        savedPositions.forEach((pos, id) => {
+            const comp = state.components.get(id);
+            if (comp) comp.position = pos;
+        });
+        savedAngles.forEach((angle, id) => {
+            const comp = state.components.get(id);
+            if (comp) comp.angle = angle;
+        });
+    }
+
+    /**
+     * Draw preview mode indicator banner.
+     */
+    drawPreviewIndicator(iteration, cost) {
+        const ctx = this.ctx;
+        const text = `PREVIEW: Iteration ${iteration}, Cost: ${cost.toFixed(1)}`;
+        const padding = 12;
+
+        ctx.font = 'bold 12px sans-serif';
+        const textWidth = ctx.measureText(text).width;
+
+        const boxWidth = textWidth + padding * 2;
+        const boxHeight = 28;
+        const x = (this.width - boxWidth) / 2;
+        const y = 10;
+
+        // Background
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(x, y, boxWidth, boxHeight);
+
+        // Border
+        ctx.strokeStyle = '#d97706';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, boxWidth, boxHeight);
+
+        // Text
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.fillText(text, this.width / 2, y + 18);
     }
 
     /**
