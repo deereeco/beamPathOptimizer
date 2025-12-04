@@ -43,6 +43,19 @@ A 2D GUI application for optimizing laser beam path component placement on an op
 - Status bar shows if CoM is inside mounting zone
 - Optimizer targets getting CoM into mounting zone
 
+### Alignment Constraints
+- **Create constraints**: Select 2+ components and press V (vertical) or H (horizontal)
+- **Persistent**: Constraints remain active when components move
+- **Bidirectional**: Moving any constrained component moves all others in the group
+- **Visual display**: Listed in properties panel when component is selected
+- **Remove constraints**:
+  - Press U to remove all constraints from selected component(s)
+  - Click the × button next to any specific constraint in the properties panel
+- **Types**:
+  - **Vertical (↕)**: Components maintain the same X coordinate
+  - **Horizontal (↔)**: Components maintain the same Y coordinate
+- Constraints automatically cleaned up when components are deleted
+
 ### Optimization
 - **Algorithm**: Simulated Annealing
 - **Adaptive parameters**: Scales based on number of movable components
@@ -152,8 +165,9 @@ A 2D GUI application for optimizing laser beam path component placement on an op
 
 | Key | Action |
 |-----|--------|
-| V | Align 2+ selected components vertically, or select tool if <2 selected |
-| H | Align 2+ selected components horizontally, or pan tool if <2 selected |
+| V | Align 2+ selected components vertically (creates persistent constraint), or select tool if <2 selected |
+| H | Align 2+ selected components horizontally (creates persistent constraint), or pan tool if <2 selected |
+| U | Remove all alignment constraints from selected component(s) |
 | C | Connect beam tool |
 | L | Toggle laser on/off |
 | R | Rotate selected components 90° clockwise |

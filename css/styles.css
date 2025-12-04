@@ -1138,6 +1138,62 @@ input[type="checkbox"] {
     cursor: not-allowed;
 }
 
+/* Alignment Constraints */
+.alignment-constraints-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.alignment-constraint-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.alignment-constraint-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.alignment-constraint-type {
+    font-weight: 500;
+    color: var(--accent);
+}
+
+.alignment-constraint-component {
+    color: var(--text-secondary);
+}
+
+.alignment-constraint-remove {
+    background: transparent;
+    border: none;
+    color: var(--danger);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.alignment-constraint-remove:hover {
+    background: var(--danger);
+    color: white;
+}
+
+.alignment-constraints-empty {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-top: 4px;
+}
+
 /* Constraint Override Checkboxes */
 .constraint-checkbox-group {
     display: flex;

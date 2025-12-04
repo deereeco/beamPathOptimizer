@@ -208,6 +208,10 @@ export class Component {
                 reflectedDistance: null  // For beam splitters: fixed distance for reflected beam (mm)
             };
 
+        // Alignment constraints (for maintaining horizontal/vertical alignment with other components)
+        // Array of {componentId: string, type: 'horizontal' | 'vertical'}
+        this.alignmentConstraints = props.alignmentConstraints || [];
+
         // Metadata
         this.notes = props.notes || '';
         this.createdAt = props.createdAt || new Date().toISOString();
@@ -566,12 +570,16 @@ export class Component {
         const updatableProps = ['name', 'position', 'angle', 'size', 'mass',
                                 'reflectance', 'transmittance', 'isFixed', 'isAngleFixed', 'notes', 'mountZone',
                                 'isShallowAngle', 'shallowAngle', 'snapToGrid',
-                                'allowAnyAngle', 'pathConstraints',
+                                'allowAnyAngle', 'pathConstraints', 'alignmentConstraints',
                                 'labelPosition', 'labelVisible', 'labelBackgroundColor'];
 
         for (const key of updatableProps) {
             if (props[key] !== undefined) {
-                if (typeof props[key] === 'object' && props[key] !== null) {
+                if (Array.isArray(props[key])) {
+                    // Arrays should be replaced, not merged
+                    this[key] = [...props[key]];
+                } else if (typeof props[key] === 'object' && props[key] !== null) {
+                    // Objects should be merged
                     this[key] = { ...this[key], ...props[key] };
                 } else {
                     this[key] = props[key];
@@ -620,6 +628,7 @@ export class Component {
             snapToGrid: this.snapToGrid,
             allowAnyAngle: this.allowAnyAngle,
             pathConstraints: { ...this.pathConstraints },
+            alignmentConstraints: this.alignmentConstraints ? [...this.alignmentConstraints] : [],
             labelPosition: this.labelPosition,
             labelVisible: this.labelVisible,
             labelBackgroundColor: this.labelBackgroundColor,

@@ -13,7 +13,7 @@ import * as BeamPhysics from './physics/BeamPhysics.js';
  */
 export const APP_VERSION = {
     major: 1,
-    minor: 4,
+    minor: 5,
     toString() {
         return `V${this.major}.${this.minor}`;
     },
@@ -574,7 +574,7 @@ export function reducer(state, action) {
         }
 
         case ActionType.MOVE_COMPONENT: {
-            const { componentId, position } = action;
+            const { componentId, position, skipConstraints } = action;
             const component = state.components.get(componentId);
             if (!component) return state;
 
@@ -583,11 +583,47 @@ export function reducer(state, action) {
             movedComponent.update({ position });
             newState.components.set(componentId, movedComponent);
 
+            // Apply alignment constraints (move constrained components too)
+            // Skip if this move was triggered by a constraint (to avoid infinite loops)
+            if (!skipConstraints && movedComponent.alignmentConstraints && movedComponent.alignmentConstraints.length > 0) {
+                const deltaX = position.x - component.position.x;
+                const deltaY = position.y - component.position.y;
+
+                movedComponent.alignmentConstraints.forEach(constraint => {
+                    const constrainedComponent = newState.components.get(constraint.componentId);
+                    if (!constrainedComponent) return;
+
+                    let newConstrainedPos = { ...constrainedComponent.position };
+
+                    if (constraint.type === 'vertical') {
+                        // Vertical alignment: match X coordinate
+                        newConstrainedPos.x = position.x;
+                    } else if (constraint.type === 'horizontal') {
+                        // Horizontal alignment: match Y coordinate
+                        newConstrainedPos.y = position.y;
+                    }
+
+                    // Move the constrained component (with skipConstraints to avoid loops)
+                    const updatedConstrained = new Component(constrainedComponent.toJSON());
+                    updatedConstrained.update({ position: newConstrainedPos });
+                    newState.components.set(constraint.componentId, updatedConstrained);
+
+                    // Recalculate beam geometry for constrained component
+                    newState.beamPath = recalculateBeamSegmentsFromComponent(
+                        constraint.componentId,
+                        updatedConstrained,
+                        newState.beamPath,
+                        state.constraints.workspace,
+                        newState.components
+                    );
+                });
+            }
+
             // Recalculate beam geometry after move
             newState.beamPath = recalculateBeamSegmentsFromComponent(
                 componentId,
                 movedComponent,
-                state.beamPath,
+                newState.beamPath,
                 state.constraints.workspace,
                 newState.components
             );
@@ -602,6 +638,19 @@ export function reducer(state, action) {
 
             newState.components = new Map(state.components);
             newState.components.delete(componentId);
+
+            // Remove alignment constraints that reference this component from all other components
+            newState.components.forEach((component, id) => {
+                if (component.alignmentConstraints && component.alignmentConstraints.length > 0) {
+                    const filteredConstraints = component.alignmentConstraints.filter(c => c.componentId !== componentId);
+                    if (filteredConstraints.length !== component.alignmentConstraints.length) {
+                        // Update component with filtered constraints
+                        const updatedComponent = new Component(component.toJSON());
+                        updatedComponent.alignmentConstraints = filteredConstraints;
+                        newState.components.set(id, updatedComponent);
+                    }
+                }
+            });
 
             // Remove connected beam segments
             newState.beamPath = new BeamPath();

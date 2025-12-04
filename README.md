@@ -2,7 +2,7 @@
 
 A web-based tool for designing and optimizing optical beam paths on a breadboard. Place optical components, connect them with laser beams, and use simulated annealing optimization to find optimal component placements.
 
-**Current Version: 1.3**
+**Current Version: 1.5**
 
 ## Features
 
@@ -57,6 +57,19 @@ For lenses and beam splitters, you can specify fixed distances:
 - **Input distance** - Fixed path length before the component
 - **Output distance** - Fixed path length after the component
 - **Reflected distance** - Fixed path length for reflected beam (beam splitters only)
+
+### Alignment Constraints
+Create persistent alignment relationships between components:
+- **Vertical Alignment (V key)** - Select 2+ components and press V to align them vertically (same X coordinate)
+- **Horizontal Alignment (H key)** - Select 2+ components and press H to align them horizontally (same Y coordinate)
+- **Persistent** - Constraints remain active when components move
+- **Bidirectional** - Moving any constrained component automatically moves all others in the group
+- **Visual Display** - Constraints shown in properties panel with ↕ (vertical) or ↔ (horizontal) indicators
+- **Remove Constraints**:
+  - Press U to remove ALL constraints from selected component(s)
+  - Click × button next to individual constraints in properties panel
+- **Auto-cleanup** - Constraints automatically removed when components are deleted
+- **Saved with Projects** - Alignment constraints persist across save/load
 
 ### Optimization
 Simulated annealing optimizer minimizes a weighted cost function:
@@ -144,12 +157,14 @@ After optimization completes, click "View Results" to explore the optimization h
 7. Press Escape or "Close Results View" to exit
 
 ### Keyboard Shortcuts
-- `V` - Select tool
-- `H` - Pan tool
+- `V` - Align 2+ components vertically (or select tool if <2 selected)
+- `H` - Align 2+ components horizontally (or pan tool if <2 selected)
+- `U` - Remove all alignment constraints from selected component(s)
 - `C` - Add Beams (connect) tool
 - `M` - Place mirror
 - `S` - Place source
 - `R` - Rotate selected component(s) 90° clockwise
+- `L` - Toggle laser on/off
 - `Delete` / `Backspace` - Delete selected
 - `Ctrl+Z` - Undo
 - `Ctrl+Y` / `Ctrl+Shift+Z` - Redo

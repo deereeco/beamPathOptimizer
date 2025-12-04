@@ -2263,6 +2263,10 @@ class BeamPathOptimizerApp {
             case 'R':
                 this.rotateSelectedComponents();
                 break;
+            case 'u':
+            case 'U':
+                this.unconstrainSelectedComponents();
+                break;
             case 'm':
             case 'M':
                 this.startPlacingComponent(ComponentType.MIRROR);
@@ -2607,17 +2611,25 @@ class BeamPathOptimizerApp {
      * Show a warning toast for movement constraint violation
      */
     showMovementWarning(message) {
+        this.showToast(message, 'danger');
+    }
+
+    /**
+     * Show a toast notification
+     * @param {string} message - The message to display
+     * @param {string} type - The type: 'success', 'warning', 'danger', 'info'
+     */
+    showToast(message, type = 'info') {
         // Create toast element if it doesn't exist
-        let toast = document.getElementById('movement-warning-toast');
+        let toast = document.getElementById('app-toast');
         if (!toast) {
             toast = document.createElement('div');
-            toast.id = 'movement-warning-toast';
+            toast.id = 'app-toast';
             toast.style.cssText = `
                 position: fixed;
                 bottom: 80px;
                 left: 50%;
                 transform: translateX(-50%);
-                background: #ef4444;
                 color: white;
                 padding: 12px 24px;
                 border-radius: 8px;
@@ -2630,14 +2642,23 @@ class BeamPathOptimizerApp {
             document.body.appendChild(toast);
         }
 
+        // Set background color based on type
+        const colors = {
+            success: '#22c55e',
+            warning: '#f59e0b',
+            danger: '#ef4444',
+            info: '#3b82f6'
+        };
+        toast.style.background = colors[type] || colors.info;
+
         // Show the toast
         toast.textContent = message;
         toast.style.opacity = '1';
 
-        // Hide after 4 seconds
+        // Hide after 3 seconds
         setTimeout(() => {
             toast.style.opacity = '0';
-        }, 4000);
+        }, 3000);
     }
 
     /**
@@ -2980,6 +3001,7 @@ class BeamPathOptimizerApp {
     /**
      * Align selected components vertically (same X coordinate)
      * Aligns all selected components to the X position of the first selected component
+     * and creates bidirectional alignment constraints
      */
     alignComponentsVertically() {
         const state = this.store.getState();
@@ -2995,10 +3017,11 @@ class BeamPathOptimizerApp {
         if (!referenceComponent) return;
 
         const referenceX = referenceComponent.position.x;
+        const selectedIds = [...state.ui.selection.selectedIds];
         let alignedCount = 0;
 
         // Align all other selected components to the reference X
-        state.ui.selection.selectedIds.forEach(id => {
+        selectedIds.forEach(id => {
             if (id !== referenceId) {
                 const component = state.components.get(id);
                 if (component) {
@@ -3008,12 +3031,34 @@ class BeamPathOptimizerApp {
             }
         });
 
+        // Create bidirectional alignment constraints between all selected components
+        selectedIds.forEach(id => {
+            const component = state.components.get(id);
+            if (!component) return;
+
+            // Add constraints to all other components in the selection
+            const newConstraints = selectedIds
+                .filter(otherId => otherId !== id)
+                .map(otherId => ({ componentId: otherId, type: 'vertical' }));
+
+            // Remove any existing vertical constraints with these components
+            const existingConstraints = component.alignmentConstraints.filter(c =>
+                c.type !== 'vertical' || !selectedIds.includes(c.componentId)
+            );
+
+            // Update the component with new constraints
+            this.store.dispatch(actions.updateComponent(id, {
+                alignmentConstraints: [...existingConstraints, ...newConstraints]
+            }));
+        });
+
         this.showToast(`Aligned ${alignedCount + 1} component(s) vertically`, 'success');
     }
 
     /**
      * Align selected components horizontally (same Y coordinate)
      * Aligns all selected components to the Y position of the first selected component
+     * and creates bidirectional alignment constraints
      */
     alignComponentsHorizontally() {
         const state = this.store.getState();
@@ -3029,10 +3074,11 @@ class BeamPathOptimizerApp {
         if (!referenceComponent) return;
 
         const referenceY = referenceComponent.position.y;
+        const selectedIds = [...state.ui.selection.selectedIds];
         let alignedCount = 0;
 
         // Align all other selected components to the reference Y
-        state.ui.selection.selectedIds.forEach(id => {
+        selectedIds.forEach(id => {
             if (id !== referenceId) {
                 const component = state.components.get(id);
                 if (component) {
@@ -3042,7 +3088,101 @@ class BeamPathOptimizerApp {
             }
         });
 
+        // Create bidirectional alignment constraints between all selected components
+        selectedIds.forEach(id => {
+            const component = state.components.get(id);
+            if (!component) return;
+
+            // Add constraints to all other components in the selection
+            const newConstraints = selectedIds
+                .filter(otherId => otherId !== id)
+                .map(otherId => ({ componentId: otherId, type: 'horizontal' }));
+
+            // Remove any existing horizontal constraints with these components
+            const existingConstraints = component.alignmentConstraints.filter(c =>
+                c.type !== 'horizontal' || !selectedIds.includes(c.componentId)
+            );
+
+            // Update the component with new constraints
+            this.store.dispatch(actions.updateComponent(id, {
+                alignmentConstraints: [...existingConstraints, ...newConstraints]
+            }));
+        });
+
         this.showToast(`Aligned ${alignedCount + 1} component(s) horizontally`, 'success');
+    }
+
+    /**
+     * Remove alignment constraint between two components (bidirectional)
+     */
+    removeAlignmentConstraint(componentId, constrainedId, constraintType) {
+        const state = this.store.getState();
+
+        // Remove constraint from both components
+        [componentId, constrainedId].forEach(id => {
+            const component = state.components.get(id);
+            if (!component) return;
+
+            const updatedConstraints = component.alignmentConstraints.filter(c =>
+                !(c.componentId === (id === componentId ? constrainedId : componentId) && c.type === constraintType)
+            );
+
+            this.store.dispatch(actions.updateComponent(id, {
+                alignmentConstraints: updatedConstraints
+            }));
+        });
+
+        this.showToast('Alignment constraint removed', 'success');
+    }
+
+    /**
+     * Remove all alignment constraints from selected components
+     */
+    unconstrainSelectedComponents() {
+        const state = this.store.getState();
+
+        if (state.ui.selection.type !== 'component' || state.ui.selection.selectedIds.length === 0) {
+            return;
+        }
+
+        let totalRemoved = 0;
+
+        // For each selected component, remove all its alignment constraints
+        state.ui.selection.selectedIds.forEach(componentId => {
+            const component = state.components.get(componentId);
+            if (!component || !component.alignmentConstraints || component.alignmentConstraints.length === 0) {
+                return;
+            }
+
+            const constraintsToRemove = [...component.alignmentConstraints];
+            totalRemoved += constraintsToRemove.length;
+
+            // Remove constraints bidirectionally
+            constraintsToRemove.forEach(constraint => {
+                const otherComponent = state.components.get(constraint.componentId);
+                if (otherComponent && otherComponent.alignmentConstraints) {
+                    // Remove the reverse constraint from the other component
+                    const updatedOtherConstraints = otherComponent.alignmentConstraints.filter(c =>
+                        c.componentId !== componentId || c.type !== constraint.type
+                    );
+                    this.store.dispatch(actions.updateComponent(constraint.componentId, {
+                        alignmentConstraints: updatedOtherConstraints
+                    }));
+                }
+            });
+
+            // Clear all constraints from this component
+            this.store.dispatch(actions.updateComponent(componentId, {
+                alignmentConstraints: []
+            }));
+        });
+
+        if (totalRemoved > 0) {
+            const componentText = state.ui.selection.selectedIds.length === 1 ? 'component' : 'components';
+            this.showToast(`Removed ${totalRemoved} constraint(s) from ${state.ui.selection.selectedIds.length} ${componentText}`, 'success');
+        } else {
+            this.showToast('No constraints to remove', 'info');
+        }
     }
 
     /**
@@ -3594,6 +3734,53 @@ class BeamPathOptimizerApp {
                 }
             } else {
                 pathConstraintGroup.style.display = 'none';
+            }
+
+            // Alignment Constraints
+            const alignmentConstraintsList = document.getElementById('alignment-constraints-list');
+            if (alignmentConstraintsList) {
+                alignmentConstraintsList.innerHTML = '';
+
+                if (component.alignmentConstraints && component.alignmentConstraints.length > 0) {
+                    component.alignmentConstraints.forEach(constraint => {
+                        const constrainedComp = state.components.get(constraint.componentId);
+                        if (!constrainedComp) return; // Component might have been deleted
+
+                        const item = document.createElement('div');
+                        item.className = 'alignment-constraint-item';
+
+                        const info = document.createElement('div');
+                        info.className = 'alignment-constraint-info';
+
+                        const type = document.createElement('span');
+                        type.className = 'alignment-constraint-type';
+                        type.textContent = constraint.type === 'vertical' ? '↕ Vertical' : '↔ Horizontal';
+
+                        const compName = document.createElement('span');
+                        compName.className = 'alignment-constraint-component';
+                        compName.textContent = `with ${constrainedComp.name}`;
+
+                        info.appendChild(type);
+                        info.appendChild(compName);
+
+                        const removeBtn = document.createElement('button');
+                        removeBtn.className = 'alignment-constraint-remove';
+                        removeBtn.textContent = '×';
+                        removeBtn.title = 'Remove constraint';
+                        removeBtn.addEventListener('click', () => {
+                            this.removeAlignmentConstraint(component.id, constraint.componentId, constraint.type);
+                        });
+
+                        item.appendChild(info);
+                        item.appendChild(removeBtn);
+                        alignmentConstraintsList.appendChild(item);
+                    });
+                } else {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.className = 'alignment-constraints-empty';
+                    emptyMsg.textContent = 'No alignment constraints';
+                    alignmentConstraintsList.appendChild(emptyMsg);
+                }
             }
         } else if (selectionType === 'zone' && selectedZoneId) {
             // Show zone properties

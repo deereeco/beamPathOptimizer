@@ -1,6 +1,4 @@
-[] - can you change default grid spacing to: 5mm
-
-[w] - add ability to align components vertically or horizontally with a keyboard shortcut. V for vertically aligned, H for horizontal. The user would select two components and then hit V or H to align them.
+[] - can you turn off grid snapping by default?
 
 [] - can you add ability to rotate, keep out zones, and mounting zones by increments of 45  degrees
 
@@ -11,7 +9,11 @@
 [] - Can you add a keyboard shortcut to select all components with CTRL-A?
 
 
+[] -  Can you hide the optimizer menu from the right pane?  I don't want to see it all the time.  I would rather it just be changed to a single button at the bottom of the right pane.  It just says optimize and once the user clicks it, the optimize menu reappears at the top  of the right pane and there is a button to stop optimize to then go back to the view  where the options for optimize are not showing anymore and the button is back at the bottom  of the right pane.  I want the button at the bottom of the right pane because once any component is selected  in the property show, I want this button to disappear and reappear when nothing is selected.
 
 
+[] -  Can you make it so that when a component is copied from another component, the name of  it does not have the word copy in it, it's just simply the next increment of that component.  For example, if I select M2 and then duplicate it in the properties menu, the new component  should just say M3 as long as that doesn't exist, or if M3 already exists, it goes to  the next one, it would be M4.
 
 
+PLANNING mode needed:
+[] -  I want to add a persistent distance constraint for lenses that allows the user to define an exact distance between two lens components. This persistent distance constraint should depend and update in real time when either lens is rotated.  The real goal of this is to essentially constrain an exact path length between lenses while still allowing a single or multiple beam reflections in between the lenses. Typically the user will fix one lens in location

@@ -1,6 +1,87 @@
 BEAM PATH OPTIMIZER - VERSION LOG
 ================================================================================
 
+Version 1.5 (2025-12-04)
+--------------------------------------------------------------------------------
+New Features:
+
+  • Persistent Alignment Constraints
+    - Press V to align 2+ selected components vertically (same X coordinate)
+    - Press H to align 2+ selected components horizontally (same Y coordinate)
+    - Constraints persist when components are moved - all constrained components move together
+    - Bidirectional constraints: moving any component in the group moves all others
+    - Alignment Constraints displayed in properties panel with visual indicators
+    - Each constraint shows type (↕ Vertical or ↔ Horizontal) and linked component name
+    - Click × button to remove individual constraints
+    - Press U key to remove ALL alignment constraints from selected component(s)
+    - Constraints automatically cleaned up when components are deleted
+    - Constraints saved/loaded with project files
+
+  • Toast Notification System
+    - Implemented comprehensive toast notification system
+    - Color-coded by type: green (success), orange (warning), red (danger), blue (info)
+    - Notifications appear at bottom center for 3 seconds
+    - Used for alignment operations, constraint removal, and other user feedback
+    - Replaces missing showToast() method that was causing console errors
+
+Bug Fixes:
+
+  • Fixed Background Image Persistence
+    - Background images now properly save and restore when loading files
+    - Images saved as data URLs (base64 encoded) in JSON
+    - Previously only saved filename, causing black screen on reload
+    - imageDataURL field added to background state
+    - Image recreated from data URL when loading file
+
+  • Fixed Component Deselection
+    - Clicking on empty workspace now properly deselects all components
+    - Visual highlights are correctly removed (not just properties panel)
+    - Issue was stale state being used after clearSelection() dispatch
+    - Fixed in both select mode and connect mode
+    - Selection state now properly synchronized with render
+
+  • Fixed Component.update() Array Handling
+    - Arrays (like alignmentConstraints) are now properly copied
+    - Previously treated arrays as objects, causing corruption
+    - Added explicit Array.isArray() check before spreading
+    - Prevents alignment constraints from becoming malformed
+
+UI/UX Improvements:
+
+  • Context-Aware V/H Keys
+    - V key: Align vertically if 2+ selected, otherwise switch to select tool
+    - H key: Align horizontally if 2+ selected, otherwise switch to pan tool
+    - Smooth workflow without conflicting with tool shortcuts
+
+  • Alignment Constraints UI Panel
+    - New "Alignment Constraints" section in properties panel
+    - Shows all constraints for selected component
+    - Visual design with colored type indicators and component names
+    - Remove buttons with hover effect for easy constraint management
+    - "No alignment constraints" message when empty
+
+Technical Changes:
+
+  • Version bumped to 1.5
+  • Component model extended with alignmentConstraints property (array)
+  • Component.toJSON() now serializes alignmentConstraints
+  • Component.update() whitelist includes alignmentConstraints
+  • Component.update() properly handles arrays vs objects
+  • MOVE_COMPONENT action enforces alignment constraints automatically
+  • DELETE_COMPONENT action cleans up orphaned constraints
+  • State management handles bidirectional constraint updates
+  • Background state includes imageDataURL field for persistence
+  • Toast notification system with type-based color coding
+
+Files Modified:
+  • js/state.js - Version to 1.5, MOVE_COMPONENT constraint enforcement, DELETE_COMPONENT cleanup
+  • js/models/Component.js - alignmentConstraints property, array handling in update(), toJSON serialization
+  • js/main.js - Alignment functions, unconstrain function, toast system, deselection fix, V/H/U key handlers, background image persistence
+  • index.html - Alignment constraints UI section in properties panel
+  • css/styles.css - Alignment constraint item styling with hover effects
+  • claude.md - Updated keyboard shortcuts and features documentation
+  • versionlog.txt - Added V1.5 changelog
+
 Version 1.4 (2025-12-03)
 --------------------------------------------------------------------------------
 Bug Fixes:
