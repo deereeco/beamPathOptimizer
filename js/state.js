@@ -188,6 +188,7 @@ export function createInitialState() {
             color: '#0d1117',    // Default canvas-bg color
             imagePath: null,     // Path to image file (for save/load)
             imageData: null,     // Runtime only: loaded image data (not saved)
+            imageDataURL: null,  // Data URL (base64) for persistence
             opacity: 100         // Opacity for background image (0-100%)
         },
 

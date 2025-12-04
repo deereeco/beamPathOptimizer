@@ -824,11 +824,13 @@ class BeamPathOptimizerApp {
             const reader = new FileReader();
             reader.onload = (event) => {
                 const img = new Image();
+                const dataURL = event.target.result; // Store the data URL
                 img.onload = () => {
                     this.store.dispatch(actions.setBackground({
                         type: 'image',
                         imagePath: file.name,
-                        imageData: img
+                        imageData: img,
+                        imageDataURL: dataURL // Save the data URL for persistence
                     }));
 
                     // Update UI
@@ -1861,11 +1863,12 @@ class BeamPathOptimizerApp {
                 this.store.dispatch(actions.clearSelection());
                 this.isSelectionBoxDragging = true;
                 this.selectionBoxStart = worldPos;
-                // Update state with selection box
+                // Update state with selection box (use fresh state after clearSelection)
+                const freshState = this.store.getState();
                 this.store.state = {
-                    ...state,
+                    ...freshState,
                     ui: {
-                        ...state.ui,
+                        ...freshState.ui,
                         selectionBox: {
                             startX: worldPos.x,
                             startY: worldPos.y,
@@ -1925,10 +1928,11 @@ class BeamPathOptimizerApp {
                     this.store.dispatch(actions.clearSelection());
                     this.isSelectionBoxDragging = true;
                     this.selectionBoxStart = worldPos;
+                    const freshState = this.store.getState();
                     this.store.state = {
-                        ...state,
+                        ...freshState,
                         ui: {
-                            ...state.ui,
+                            ...freshState.ui,
                             selectionBox: {
                                 startX: worldPos.x,
                                 startY: worldPos.y,
@@ -2231,11 +2235,21 @@ class BeamPathOptimizerApp {
                 break;
             case 'v':
             case 'V':
-                this.setTool('select');
+                // If 2+ components selected, align vertically; otherwise switch to select tool
+                if (state.ui.selection.selectedIds.length >= 2) {
+                    this.alignComponentsVertically();
+                } else {
+                    this.setTool('select');
+                }
                 break;
             case 'h':
             case 'H':
-                this.setTool('pan');
+                // If 2+ components selected, align horizontally; otherwise switch to pan tool
+                if (state.ui.selection.selectedIds.length >= 2) {
+                    this.alignComponentsHorizontally();
+                } else {
+                    this.setTool('pan');
+                }
                 break;
             case 'c':
             case 'C':
@@ -2964,6 +2978,74 @@ class BeamPathOptimizerApp {
     }
 
     /**
+     * Align selected components vertically (same X coordinate)
+     * Aligns all selected components to the X position of the first selected component
+     */
+    alignComponentsVertically() {
+        const state = this.store.getState();
+
+        if (state.ui.selection.selectedIds.length < 2) {
+            return;
+        }
+
+        // Get the first selected component as the reference
+        const referenceId = state.ui.selection.selectedIds[0];
+        const referenceComponent = state.components.get(referenceId);
+
+        if (!referenceComponent) return;
+
+        const referenceX = referenceComponent.position.x;
+        let alignedCount = 0;
+
+        // Align all other selected components to the reference X
+        state.ui.selection.selectedIds.forEach(id => {
+            if (id !== referenceId) {
+                const component = state.components.get(id);
+                if (component) {
+                    this.store.dispatch(actions.moveComponent(id, { x: referenceX, y: component.position.y }));
+                    alignedCount++;
+                }
+            }
+        });
+
+        this.showToast(`Aligned ${alignedCount + 1} component(s) vertically`, 'success');
+    }
+
+    /**
+     * Align selected components horizontally (same Y coordinate)
+     * Aligns all selected components to the Y position of the first selected component
+     */
+    alignComponentsHorizontally() {
+        const state = this.store.getState();
+
+        if (state.ui.selection.selectedIds.length < 2) {
+            return;
+        }
+
+        // Get the first selected component as the reference
+        const referenceId = state.ui.selection.selectedIds[0];
+        const referenceComponent = state.components.get(referenceId);
+
+        if (!referenceComponent) return;
+
+        const referenceY = referenceComponent.position.y;
+        let alignedCount = 0;
+
+        // Align all other selected components to the reference Y
+        state.ui.selection.selectedIds.forEach(id => {
+            if (id !== referenceId) {
+                const component = state.components.get(id);
+                if (component) {
+                    this.store.dispatch(actions.moveComponent(id, { x: component.position.x, y: referenceY }));
+                    alignedCount++;
+                }
+            }
+        });
+
+        this.showToast(`Aligned ${alignedCount + 1} component(s) horizontally`, 'success');
+    }
+
+    /**
      * Zoom by factor
      */
     zoom(factor) {
@@ -3174,6 +3256,7 @@ class BeamPathOptimizerApp {
                         color: '#0d1117',
                         imagePath: null,
                         imageData: null,
+                        imageDataURL: null,
                         opacity: 100
                     },
                     wavelengths: json.wavelengths || [
@@ -3196,6 +3279,19 @@ class BeamPathOptimizerApp {
 
                 // Load the document
                 this.store.dispatch(actions.loadDocument(newState));
+
+                // Recreate background image from data URL if present
+                if (newState.background && newState.background.imageDataURL) {
+                    const img = new Image();
+                    img.onload = () => {
+                        this.store.dispatch(actions.setBackground({
+                            ...newState.background,
+                            imageData: img
+                        }));
+                        this.render();
+                    };
+                    img.src = newState.background.imageDataURL;
+                }
 
                 // Recalculate derived values
                 this.store.dispatch(actions.recalculate());
@@ -3282,8 +3378,9 @@ class BeamPathOptimizerApp {
                 type: state.background.type,
                 color: state.background.color,
                 imagePath: state.background.imagePath,
+                imageDataURL: state.background.imageDataURL, // Save data URL for persistence
                 opacity: state.background.opacity
-                // Note: imageData is runtime only, not saved
+                // Note: imageData (Image object) is runtime only, not saved
             },
             wavelengths: state.wavelengths,
             activeWavelengthId: state.activeWavelengthId

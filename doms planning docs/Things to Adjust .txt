@@ -1,0 +1,17 @@
+[] - can you change default grid spacing to: 5mm
+
+[w] - add ability to align components vertically or horizontally with a keyboard shortcut. V for vertically aligned, H for horizontal. The user would select two components and then hit V or H to align them.
+
+[] - can you add ability to rotate, keep out zones, and mounting zones by increments of 45  degrees
+
+[] - can you add ability to fix location of keep-out zones and mount zones as a property for it.
+
+[] - can you add keyboard shortcut for fixing components and zones location and rotation with F. 
+
+[] - Can you add a keyboard shortcut to select all components with CTRL-A?
+
+
+
+
+
+

@@ -152,8 +152,8 @@ A 2D GUI application for optimizing laser beam path component placement on an op
 
 | Key | Action |
 |-----|--------|
-| V | Select tool |
-| H | Pan tool |
+| V | Align 2+ selected components vertically, or select tool if <2 selected |
+| H | Align 2+ selected components horizontally, or pan tool if <2 selected |
 | C | Connect beam tool |
 | L | Toggle laser on/off |
 | R | Rotate selected components 90° clockwise |
