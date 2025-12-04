@@ -77,6 +77,13 @@ class BeamPathOptimizerApp {
             versionEl.textContent = APP_VERSION.toString();
         }
 
+        // Initialize file name input
+        const fileNameInput = document.getElementById('file-name-input');
+        if (fileNameInput) {
+            const state = this.store.getState();
+            fileNameInput.value = state.document.name || 'beam-path';
+        }
+
         console.log('Beam Path Optimizer initialized', APP_VERSION.toString());
     }
 
@@ -3013,6 +3020,14 @@ class BeamPathOptimizerApp {
             }
         }
         this.store.dispatch(actions.newDocument());
+
+        // Update file name input to match new document
+        const fileNameInput = document.getElementById('file-name-input');
+        if (fileNameInput) {
+            const state = this.store.getState();
+            fileNameInput.value = state.document.name || 'beam-path';
+        }
+
         this.zoomFit();
     }
 
@@ -3189,6 +3204,12 @@ class BeamPathOptimizerApp {
                 document.getElementById('workspace-width').value = constraints.workspace.width;
                 document.getElementById('workspace-height').value = constraints.workspace.height;
 
+                // Update file name input
+                const fileNameInput = document.getElementById('file-name-input');
+                if (fileNameInput) {
+                    fileNameInput.value = newState.document.name || 'beam-path';
+                }
+
                 // Reset view
                 this.zoomFit();
                 this.updateUI();
@@ -3274,7 +3295,10 @@ class BeamPathOptimizerApp {
 
         const a = window.document.createElement('a');
         a.href = url;
-        a.download = (state.document.name || 'beam-path') + '.json';
+        // Get filename from the file name input
+        const fileNameInput = window.document.getElementById('file-name-input');
+        const fileName = fileNameInput?.value.trim() || state.document.name || 'beam-path';
+        a.download = fileName + '.json';
         a.click();
 
         URL.revokeObjectURL(url);

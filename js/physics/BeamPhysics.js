@@ -251,9 +251,14 @@ export function getOutputDirection(component, inputAngle, outputPort = 'reflecte
                 // Transmitted beam continues straight through
                 return normalizeAngle(inputAngle);
             } else {
-                // Reflected beam
+                // Reflected beam uses proper mirror reflection physics
+                // The diagonal surface angle is component.angle - 45°
+                // (the diagonal line goes from top-left to bottom-right at -45° relative to component)
                 const bsAngle = component.isShallowAngle ? component.shallowAngle : component.angle;
-                return calculateMirrorReflection(inputAngle, bsAngle);
+                const diagonalSurfaceAngle = normalizeAngle(bsAngle - 45);
+
+                // Use standard mirror reflection with the diagonal surface
+                return calculateMirrorReflection(inputAngle, diagonalSurfaceAngle);
             }
 
         case ComponentType.LENS:

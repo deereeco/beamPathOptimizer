@@ -152,6 +152,35 @@ input[type="text"]:focus {
     margin: 0 8px;
 }
 
+.file-name-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.file-name-input {
+    width: 200px;
+    padding: 6px 10px;
+    font-size: 13px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    transition: border-color 0.15s;
+}
+
+.file-name-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--bg-secondary);
+}
+
+.file-name-input::placeholder {
+    color: var(--text-muted);
+}
+
 /* ===== Main Content ===== */
 #main-content {
     display: flex;
