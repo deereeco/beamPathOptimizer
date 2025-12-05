@@ -196,6 +196,8 @@ input[type="text"]:focus {
     border-color: var(--border-color);
     overflow-y: auto;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 #tools-panel {
@@ -219,6 +221,12 @@ input[type="text"]:focus {
 #properties-panel input,
 #properties-panel select {
     font-size: calc(13px * var(--panel-text-scale));
+}
+
+/* Scale padding for number inputs in properties panel */
+#properties-panel input[type="number"],
+#properties-panel input[type="text"] {
+    padding: calc(4px * var(--panel-text-scale)) calc(8px * var(--panel-text-scale));
 }
 
 #properties-panel .checkbox-label,
@@ -252,6 +260,7 @@ input[type="text"]:focus {
     padding: 12px;
     border-bottom: 1px solid var(--border-color);
     text-align: center;
+    flex-shrink: 0;
 }
 
 .panel-section h3 {
@@ -449,7 +458,9 @@ input[type="text"]:focus {
 }
 
 .grid-size-inputs input[type="number"] {
-    width: 55px;
+    min-width: calc(55px * var(--panel-text-scale));
+    width: auto;
+    max-width: 100%;
 }
 
 /* ===== Panel Resize Handle ===== */
@@ -483,6 +494,7 @@ body.resizing-panel * {
     align-items: center;
     gap: 8px;
     background: var(--bg-secondary);
+    flex-shrink: 0;
 }
 
 .panel-text-size-control label {
@@ -642,7 +654,9 @@ body.resizing-panel * {
 }
 
 .property-input.small {
-    width: 70px;
+    min-width: calc(70px * var(--panel-text-scale));
+    width: auto;
+    max-width: 100%;
 }
 
 .property-value {
@@ -737,7 +751,9 @@ body.resizing-panel * {
 }
 
 .mount-zone-row .property-input.small {
-    width: 50px;
+    min-width: calc(50px * var(--panel-text-scale));
+    width: auto;
+    max-width: 100%;
 }
 
 .property-actions {
@@ -1194,6 +1210,131 @@ input[type="checkbox"] {
     margin-top: 4px;
 }
 
+/* Path Length Constraints */
+.path-length-constraints-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+    margin-bottom: 12px;
+}
+
+.constraint-add-btn {
+    width: 100%;
+    padding: 6px 12px;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+.path-constraint-item {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.path-constraint-item.satisfied {
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.path-constraint-item.violated {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.path-constraint-item.inactive {
+    background: rgba(100, 116, 139, 0.1);
+    border-color: rgba(100, 116, 139, 0.3);
+    opacity: 0.7;
+}
+
+.path-constraint-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.path-constraint-icon {
+    font-size: 14px;
+    color: var(--accent);
+}
+
+.path-constraint-target {
+    flex: 1;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.path-constraint-remove {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 16px;
+    font-weight: bold;
+    transition: all 0.15s;
+}
+
+.path-constraint-remove:hover {
+    background: var(--danger);
+    color: white;
+}
+
+.path-constraint-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-left: 20px;
+}
+
+.path-constraint-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.path-constraint-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    min-width: 60px;
+}
+
+.path-constraint-value {
+    font-size: 11px;
+    font-family: monospace;
+}
+
+.path-constraint-current {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: monospace;
+    font-size: 11px;
+}
+
+.path-constraint-current.satisfied {
+    color: #22c55e;
+}
+
+.path-constraint-current.violated {
+    color: #ef4444;
+}
+
+.path-constraint-current.inactive {
+    color: var(--text-muted);
+}
+
+.path-constraint-status-icon {
+    font-size: 12px;
+}
+
 /* Constraint Override Checkboxes */
 .constraint-checkbox-group {
     display: flex;
@@ -1520,12 +1661,15 @@ input[type="checkbox"] {
     width: 100%;
 }
 
+.bg-image-controls {
+    margin-left: 24px;
+    margin-top: 8px;
+}
+
 .opacity-control {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    margin-left: 24px;
-    margin-top: 8px;
     width: calc(100% - 24px);
 }
 
@@ -1784,4 +1928,37 @@ input[type="checkbox"] {
 
 .segment-wavelength-actions select {
     flex: 1;
+}
+
+/* Optimizer Toggle Button */
+#optimizer-toggle-container {
+    margin-top: auto;
+    padding: 12px 16px;
+    background: var(--panel-bg);
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.optimizer-toggle-btn {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Section Header with Button */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.section-header h3 {
+    margin: 0;
+}
+
+.section-header .action-btn.small {
+    padding: 4px 12px;
+    font-size: 12px;
 }

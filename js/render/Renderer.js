@@ -271,15 +271,30 @@ export class Renderer {
             const isSelected = selectedZoneId === zoneIdKey;
             const isHovered = hoveredZoneId === zoneIdKey;
 
+            // Calculate center position in screen coordinates
+            const centerWorld = {
+                x: zone.bounds.x + zone.bounds.width / 2,
+                y: zone.bounds.y + zone.bounds.height / 2
+            };
+            const centerScreen = this.worldToScreen(centerWorld.x, centerWorld.y, viewport);
+
+            // Calculate dimensions in screen coordinates
             const topLeft = this.worldToScreen(zone.bounds.x, zone.bounds.y, viewport);
             const bottomRight = this.worldToScreen(
                 zone.bounds.x + zone.bounds.width,
                 zone.bounds.y + zone.bounds.height,
                 viewport
             );
-
             const w = bottomRight.x - topLeft.x;
             const h = bottomRight.y - topLeft.y;
+
+            // Apply rotation if specified
+            ctx.save();
+            if (zone.rotation) {
+                ctx.translate(centerScreen.x, centerScreen.y);
+                ctx.rotate((zone.rotation * Math.PI) / 180);
+                ctx.translate(-centerScreen.x, -centerScreen.y);
+            }
 
             // Fill
             ctx.fillStyle = this.colors.keepOutZone;
@@ -303,6 +318,8 @@ export class Renderer {
             ctx.font = '10px sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(zone.name || 'KEEP-OUT', topLeft.x + w / 2, topLeft.y + h / 2);
+
+            ctx.restore();
         });
     }
 
@@ -345,15 +362,30 @@ export class Renderer {
         const isSelected = selectedZoneId === 'mounting';
         const isHovered = hoveredZoneId === 'mounting';
 
+        // Calculate center position in screen coordinates
+        const centerWorld = {
+            x: zone.bounds.x + zone.bounds.width / 2,
+            y: zone.bounds.y + zone.bounds.height / 2
+        };
+        const centerScreen = this.worldToScreen(centerWorld.x, centerWorld.y, viewport);
+
+        // Calculate dimensions in screen coordinates
         const topLeft = this.worldToScreen(zone.bounds.x, zone.bounds.y, viewport);
         const bottomRight = this.worldToScreen(
             zone.bounds.x + zone.bounds.width,
             zone.bounds.y + zone.bounds.height,
             viewport
         );
-
         const w = bottomRight.x - topLeft.x;
         const h = bottomRight.y - topLeft.y;
+
+        // Apply rotation if specified
+        ctx.save();
+        if (zone.rotation) {
+            ctx.translate(centerScreen.x, centerScreen.y);
+            ctx.rotate((zone.rotation * Math.PI) / 180);
+            ctx.translate(-centerScreen.x, -centerScreen.y);
+        }
 
         // Fill
         ctx.fillStyle = this.colors.mountingZone;
@@ -386,6 +418,8 @@ export class Renderer {
         ctx.moveTo(centerX, centerY - 8);
         ctx.lineTo(centerX, centerY + 8);
         ctx.stroke();
+
+        ctx.restore();
     }
 
     /**
@@ -430,6 +464,14 @@ export class Renderer {
 
         const ctx = this.ctx;
 
+        // Calculate center of mount zone in screen coordinates
+        const centerWorld = {
+            x: mountBounds.x + mountBounds.width / 2,
+            y: mountBounds.y + mountBounds.height / 2
+        };
+        const centerScreen = this.worldToScreen(centerWorld.x, centerWorld.y, viewport);
+
+        // Calculate dimensions in screen coordinates
         const topLeft = this.worldToScreen(mountBounds.x, mountBounds.y, viewport);
         const bottomRight = this.worldToScreen(
             mountBounds.x + mountBounds.width,
@@ -439,6 +481,14 @@ export class Renderer {
 
         const w = bottomRight.x - topLeft.x;
         const h = bottomRight.y - topLeft.y;
+
+        // Apply rotation around center to match component rotation
+        ctx.save();
+        if (component.angle) {
+            ctx.translate(centerScreen.x, centerScreen.y);
+            ctx.rotate((component.angle * Math.PI) / 180);
+            ctx.translate(-centerScreen.x, -centerScreen.y);
+        }
 
         // Fill - red tint if violation, orange otherwise
         ctx.fillStyle = hasViolation
@@ -454,6 +504,8 @@ export class Renderer {
         ctx.setLineDash([3, 3]);
         ctx.strokeRect(topLeft.x, topLeft.y, w, h);
         ctx.setLineDash([]);
+
+        ctx.restore();
     }
 
     /**
@@ -486,6 +538,17 @@ export class Renderer {
         switch (component.type) {
             case ComponentType.SOURCE:
                 this.drawSourceShape(ctx, halfW, halfH, color);
+                // Draw "disabled" indicator if source is not emitting light
+                if (component.emitLight === false) {
+                    ctx.strokeStyle = '#ff4444';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(-halfW * 0.7, -halfH * 0.7);
+                    ctx.lineTo(halfW * 0.7, halfH * 0.7);
+                    ctx.moveTo(-halfW * 0.7, halfH * 0.7);
+                    ctx.lineTo(halfW * 0.7, -halfH * 0.7);
+                    ctx.stroke();
+                }
                 break;
             case ComponentType.DETECTOR:
                 this.drawDetectorShape(ctx, halfW, halfH, color);
@@ -925,6 +988,135 @@ export class Renderer {
     }
 
     /**
+     * Draw fold guide lines for path length constraints
+     */
+    drawFoldGuides(components, viewport) {
+        const ctx = this.ctx;
+
+        // Import FoldGeometry dynamically if needed
+        const FoldGeometry = window.FoldGeometry;
+        if (!FoldGeometry) return;
+
+        components.forEach(component => {
+            if (!component.pathLengthConstraints) return;
+
+            component.pathLengthConstraints.forEach(constraint => {
+                // Only draw guides for auto fold mode
+                if (constraint.foldMode !== 'auto') return;
+
+                const target = components.get ? components.get(constraint.targetComponentId) :
+                    Array.from(components).find(c => c.id === constraint.targetComponentId);
+                if (!target) return;
+
+                // Calculate fold geometry
+                const geometry = FoldGeometry.calculate(
+                    component,
+                    target,
+                    constraint.targetPathLength
+                );
+
+                // Determine colors based on validity
+                const strokeColor = geometry.valid ? 'rgba(100, 200, 255, 0.5)' : 'rgba(255, 100, 100, 0.5)';
+                const fillColor = geometry.valid ? 'rgba(100, 200, 255, 0.3)' : 'rgba(255, 100, 100, 0.3)';
+
+                // Draw fold path segments
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([8, 4]);
+                ctx.lineCap = 'round';
+
+                if (geometry.segments && geometry.segments.length > 0) {
+                    geometry.segments.forEach(segment => {
+                        const startScreen = this.worldToScreen(segment.start.x, segment.start.y, viewport);
+                        const endScreen = this.worldToScreen(segment.end.x, segment.end.y, viewport);
+
+                        ctx.beginPath();
+                        ctx.moveTo(startScreen.x, startScreen.y);
+                        ctx.lineTo(endScreen.x, endScreen.y);
+                        ctx.stroke();
+
+                        // Draw segment length label
+                        const midX = (startScreen.x + endScreen.x) / 2;
+                        const midY = (startScreen.y + endScreen.y) / 2;
+                        this.drawSegmentLabel(ctx, midX, midY, `${segment.length.toFixed(1)}mm`);
+                    });
+                }
+
+                // Draw fold vertices
+                if (geometry.folds && geometry.folds.length > 0) {
+                    ctx.fillStyle = fillColor;
+                    ctx.strokeStyle = strokeColor;
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([]);
+
+                    geometry.folds.forEach(fold => {
+                        const foldScreen = this.worldToScreen(fold.x, fold.y, viewport);
+
+                        ctx.beginPath();
+                        ctx.arc(foldScreen.x, foldScreen.y, 5, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.stroke();
+                    });
+                }
+
+                // Reset line dash
+                ctx.setLineDash([]);
+
+                // Draw error message if invalid
+                if (!geometry.valid && geometry.error) {
+                    const midScreen = this.worldToScreen(
+                        (component.position.x + target.position.x) / 2,
+                        (component.position.y + target.position.y) / 2,
+                        viewport
+                    );
+
+                    ctx.fillStyle = 'rgba(255, 50, 50, 0.9)';
+                    ctx.font = '11px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    // Draw background
+                    const metrics = ctx.measureText(geometry.error);
+                    const padding = 4;
+                    ctx.fillRect(
+                        midScreen.x - metrics.width / 2 - padding,
+                        midScreen.y - 8,
+                        metrics.width + padding * 2,
+                        16
+                    );
+
+                    // Draw text
+                    ctx.fillStyle = '#fff';
+                    ctx.fillText(geometry.error, midScreen.x, midScreen.y);
+                }
+            });
+        });
+    }
+
+    /**
+     * Draw segment label with background
+     */
+    drawSegmentLabel(ctx, x, y, text) {
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Measure text
+        const metrics = ctx.measureText(text);
+        const padding = 3;
+        const bgWidth = metrics.width + padding * 2;
+        const bgHeight = 14;
+
+        // Draw background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(x - bgWidth / 2, y - bgHeight / 2, bgWidth, bgHeight);
+
+        // Draw text
+        ctx.fillStyle = '#fff';
+        ctx.fillText(text, x, y);
+    }
+
+    /**
      * Draw arrow in the middle of a beam segment
      */
     drawArrow(ctx, start, end, color) {
@@ -1094,6 +1286,9 @@ export class Renderer {
 
         // Draw beam paths (with selection state for highlighting)
         this.drawBeamPaths(beamPath, Array.from(components.values()), viewport, selection, wavelengths);
+
+        // Draw fold guide lines for path length constraints
+        this.drawFoldGuides(components, viewport);
 
         // Collect mount zone violations for highlighting
         const mountZoneViolations = new Set();

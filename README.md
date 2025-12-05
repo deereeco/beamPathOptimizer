@@ -2,14 +2,14 @@
 
 A web-based tool for designing and optimizing optical beam paths on a breadboard. Place optical components, connect them with laser beams, and use simulated annealing optimization to find optimal component placements.
 
-**Current Version: 1.5**
+**Current Version: 1.6**
 
 ## Features
 
 ### Component Types
-- **Source** - Laser light source with configurable emission direction
+- **Source** - Laser light source with configurable emission direction and optional light emission control
 - **Mirror** - Reflects beam at angles (45° or 135° by default)
-- **Beam Splitter** - Partially reflects and transmits light; supports shallow angles (5-10°)
+- **Beam Splitter** - Partially reflects and transmits light based on reflectance property; supports shallow angles (5-10°)
 - **Lens** - Transmits beam straight through; supports fixed path length constraints
 - **Waveplate** - Transmits beam straight through
 - **Filter** - Transmits beam straight through
@@ -20,7 +20,17 @@ Realistic optical constraints are enforced:
 - **Mirrors** snap to 45° or 135° angles (grid-locked)
 - **Transmission components** (lenses, waveplates, filters) must be perpendicular to the beam
 - **Beam splitters** support standard angles or shallow angles for specific applications
+- **Beam splitter reflectance** - Adjust reflectance slider (0-100%) to control reflection vs transmission
+  - 100% reflectance → only reflected beam
+  - 0% reflectance → only transmitted beam
+  - 50% → both beams (default)
 - **Invalid connections are blocked** with clear error messages
+
+### Source Light Emission Control
+- **Emit Light Property** - Each source has an "Emit light when lasers on" checkbox
+- **Selective Activation** - Disable individual sources without removing them from the layout
+- **Visual Indicator** - Disabled sources show a red "X" overlay
+- **Saved with Projects** - Emission state persists across save/load
 
 ### Multiple Wavelengths / Beam Colors
 - Select wavelength before adding beams (Beams section in left panel)
@@ -41,7 +51,6 @@ Realistic optical constraints are enforced:
   - Choose solid color with color picker
   - Or select image file for background
   - Adjust image opacity (0-100%)
-  - "Reset to Default" button to restore original dark background
 - **Grid** (Grid Settings button - top-right corner of canvas):
   - Toggle grid visibility on/off (hidden by default)
   - Toggle grid snapping independently

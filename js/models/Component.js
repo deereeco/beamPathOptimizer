@@ -56,25 +56,26 @@ export const DEFAULT_ANGLES = {
 export const ComponentDefaults = {
     [ComponentType.SOURCE]: {
         size: { width: 40, height: 20 },
-        mass: 200,
+        mass: 44.3,
         reflectance: 0,
         transmittance: 0,
         color: '#ef4444',
         ports: { output: true },
-        mountZone: { enabled: false, paddingX: 15, paddingY: 15, offsetX: 0, offsetY: 0 }
+        mountZone: { enabled: false, paddingX: 15, paddingY: 15, offsetX: 0, offsetY: 0 },
+        emitLight: true
     },
     [ComponentType.MIRROR]: {
         size: { width: 25, height: 5 },
-        mass: 120,
+        mass: 100,
         reflectance: 1.0,
         transmittance: 0,
         color: '#3b82f6',
         ports: { input: true, reflected: true },
-        mountZone: { enabled: false, paddingX: 10, paddingY: 10, offsetX: 0, offsetY: 0 }
+        mountZone: { enabled: false, paddingX: 1, paddingY: 1, offsetX: 0, offsetY: -10 }
     },
     [ComponentType.BEAM_SPLITTER]: {
-        size: { width: 25, height: 25 },
-        mass: 85,
+        size: { width: 12, height: 12 },
+        mass: 22,
         reflectance: 0.5,
         transmittance: 0.5,
         color: '#8b5cf6',
@@ -83,7 +84,7 @@ export const ComponentDefaults = {
     },
     [ComponentType.LENS]: {
         size: { width: 8, height: 30 },
-        mass: 60,
+        mass: 60.4,
         reflectance: 0.02,
         transmittance: 0.98,
         color: '#06b6d4',
@@ -92,7 +93,7 @@ export const ComponentDefaults = {
     },
     [ComponentType.WAVEPLATE]: {
         size: { width: 20, height: 5 },
-        mass: 40,
+        mass: 20.4,
         reflectance: 0.01,
         transmittance: 0.99,
         color: '#f59e0b',
@@ -178,6 +179,9 @@ export class Component {
 
         // === NEW: Beam Physics Properties ===
 
+        // Emission control for sources - whether this source emits light when "lasers on" is enabled
+        this.emitLight = props.emitLight ?? (defaults.emitLight ?? true);
+
         // Emission angle for sources - always equals the component angle
         // (The beam travels out of the pointed end of the source)
         // Note: We keep this property for backward compatibility with saved files,
@@ -187,8 +191,8 @@ export class Component {
         this.isShallowAngle = props.isShallowAngle || false;
         this.shallowAngle = props.shallowAngle ?? 5;  // degrees (typically 5-10)
 
-        // Per-component grid snap toggle (default true, false for shallow angle beam splitters)
-        this.snapToGrid = props.snapToGrid ?? true;
+        // Per-component grid snap toggle (default false)
+        this.snapToGrid = props.snapToGrid ?? false;
 
         // Allow any angle override (bypasses angle constraints for this component)
         this.allowAnyAngle = props.allowAnyAngle ?? false;
@@ -211,6 +215,11 @@ export class Component {
         // Alignment constraints (for maintaining horizontal/vertical alignment with other components)
         // Array of {componentId: string, type: 'horizontal' | 'vertical'}
         this.alignmentConstraints = props.alignmentConstraints || [];
+
+        // Path length constraints (for maintaining fixed optical path length between components)
+        // Array of {targetComponentId: string, targetPathLength: number (mm), tolerance: number (mm), foldMode: 'auto'|'disabled'}
+        // foldMode: 'auto' = fold-based system with visual guides, 'disabled' = blocking validation only
+        this.pathLengthConstraints = props.pathLengthConstraints || [];
 
         // Metadata
         this.notes = props.notes || '';
@@ -325,37 +334,44 @@ export class Component {
         const offsetX = this.mountZone.offsetX ?? 0;
         const offsetY = this.mountZone.offsetY ?? 0;
 
-        const bbox = this.getBoundingBox();
+        // Calculate mount zone in local (unrotated) space
+        const halfW = this.size.width / 2 + paddingX;
+        const halfH = this.size.height / 2 + paddingY;
 
-        // Calculate center of component bounding box
-        const centerX = (bbox.minX + bbox.maxX) / 2;
-        const centerY = (bbox.minY + bbox.maxY) / 2;
+        // Apply rotation to mount zone corners
+        const rad = (this.angle * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
 
-        // Apply offset to get mount zone center
-        const mountCenterX = centerX + offsetX;
-        const mountCenterY = centerY + offsetY;
+        // Calculate rotated corners (with offset applied in rotated space)
+        const corners = [
+            { x: -halfW + offsetX, y: -halfH + offsetY },
+            { x: halfW + offsetX, y: -halfH + offsetY },
+            { x: halfW + offsetX, y: halfH + offsetY },
+            { x: -halfW + offsetX, y: halfH + offsetY }
+        ].map(c => ({
+            x: this.position.x + c.x * cos - c.y * sin,
+            y: this.position.y + c.x * sin + c.y * cos
+        }));
 
-        // Calculate mount zone dimensions (component size + padding on each side)
-        const compWidth = bbox.maxX - bbox.minX;
-        const compHeight = bbox.maxY - bbox.minY;
-        const mountWidth = compWidth + 2 * paddingX;
-        const mountHeight = compHeight + 2 * paddingY;
+        const xs = corners.map(c => c.x);
+        const ys = corners.map(c => c.y);
 
-        // Calculate bounds from center
-        const minX = mountCenterX - mountWidth / 2;
-        const minY = mountCenterY - mountHeight / 2;
-        const maxX = mountCenterX + mountWidth / 2;
-        const maxY = mountCenterY + mountHeight / 2;
+        const minX = Math.min(...xs);
+        const minY = Math.min(...ys);
+        const maxX = Math.max(...xs);
+        const maxY = Math.max(...ys);
 
         return {
             x: minX,
             y: minY,
-            width: mountWidth,
-            height: mountHeight,
+            width: maxX - minX,
+            height: maxY - minY,
             minX,
             minY,
             maxX,
-            maxY
+            maxY,
+            corners  // Include corners for rotated collision detection
         };
     }
 
@@ -569,8 +585,8 @@ export class Component {
     update(props) {
         const updatableProps = ['name', 'position', 'angle', 'size', 'mass',
                                 'reflectance', 'transmittance', 'isFixed', 'isAngleFixed', 'notes', 'mountZone',
-                                'isShallowAngle', 'shallowAngle', 'snapToGrid',
-                                'allowAnyAngle', 'pathConstraints', 'alignmentConstraints',
+                                'emitLight', 'isShallowAngle', 'shallowAngle', 'snapToGrid',
+                                'allowAnyAngle', 'pathConstraints', 'alignmentConstraints', 'pathLengthConstraints',
                                 'labelPosition', 'labelVisible', 'labelBackgroundColor'];
 
         for (const key of updatableProps) {
@@ -622,6 +638,7 @@ export class Component {
             isAngleFixed: this.isAngleFixed,
             mountZone: { ...this.mountZone },
             // Beam physics properties
+            emitLight: this.emitLight,
             emissionAngle: this.emissionAngle,
             isShallowAngle: this.isShallowAngle,
             shallowAngle: this.shallowAngle,
@@ -629,6 +646,7 @@ export class Component {
             allowAnyAngle: this.allowAnyAngle,
             pathConstraints: { ...this.pathConstraints },
             alignmentConstraints: this.alignmentConstraints ? [...this.alignmentConstraints] : [],
+            pathLengthConstraints: this.pathLengthConstraints ? [...this.pathLengthConstraints] : [],
             labelPosition: this.labelPosition,
             labelVisible: this.labelVisible,
             labelBackgroundColor: this.labelBackgroundColor,

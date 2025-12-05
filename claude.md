@@ -22,7 +22,11 @@ A 2D GUI application for optimizing laser beam path component placement on an op
 ### Beam Paths
 - Graph-based beam path model (segments connect component ports)
 - "Connect" tool to draw beam connections between components
-- Beam splitters create two output ports (reflected/transmitted)
+- Beam splitters create two output ports (reflected/transmitted) based on reflectance property
+  - Adjustable reflectance (0-100%) controls which beams are created
+  - 100% = reflected only, 0% = transmitted only, 50% = both (default)
+- Source components have optional "Emit light" control to disable individual sources
+  - Disabled sources show red X overlay
 - Color coding by branch level (red → orange → yellow → green)
 - Line thickness represents beam power
 - Direction arrows on beam segments
@@ -669,3 +673,320 @@ Version 1.2 released - see `versionlog.txt` for full changelog.
 | Version format consistency | ✅ Completed |
 
 Version 1.4 released - see `versionlog.txt` for full changelog.
+
+---
+
+## Phase 9: Manual Fold-Based Path Length Constraints - COMPLETED (V1.5)
+
+### Overview
+
+A new path length constraint system that allows users to maintain exact optical path lengths between lenses while adding configurable folds (mirrors) to create L-shaped or U-shaped beam paths.
+
+**Key Concept**: Instead of keeping lenses at fixed positions, the system allows geometric transformations (L-shape, U-shape) while maintaining the total path length through the fold mirrors.
+
+### Features
+
+#### 1. Constraint Creation
+- **Only works with lenses** (not beam splitters or other components)
+- **H/V alignment required**: Lenses must be aligned based on their orientation:
+  - 0° lenses → horizontally aligned (same Y coordinate)
+  - 90° lenses → vertically aligned (same X coordinate)
+  - 180° lenses → horizontally aligned (same Y coordinate)
+  - 270° lenses → vertically aligned (same X coordinate)
+- Validation prevents constraint creation if lenses aren't properly aligned
+- Always starts with **0 folds** (straight line path)
+
+#### 2. Fold Count Control
+Users can switch between three geometric configurations:
+
+**0 Folds (Straight Line)**:
+- Direct path between lenses
+- Both lenses maintain same orientation
+- No mirrors
+- Path length = straight line distance
+
+**1 Fold (L-Shape)**:
+- Single mirror creates 90° reflection
+- Creates L-shaped beam path
+- Lenses become perpendicular to each other
+- Target lens **moves** to create the L geometry
+- Mirror positioned at the corner
+- Path length split equally between two segments
+
+**2 Folds (U-Shape)**:
+- Two mirrors create two 90° reflections
+- Creates U-shaped beam path
+- Lenses end up parallel facing **opposite directions** (180° apart)
+- Target lens **moves** to create the U return path
+- Path goes: out → across → back
+- Path length split into three equal segments
+
+#### 3. UI Controls
+
+**Properties Panel**:
+- Three buttons: `0` | `1` | `2` (fold count selector)
+- Active button highlighted in green
+- Shows mirror count when folds > 0
+- Toggle "Fold mode" checkbox to enable/disable
+- Displays current path length and validity status
+
+**Workflow**:
+1. Select two lenses (both horizontally or vertically aligned)
+2. Create path length constraint
+3. Click fold count buttons to add/remove mirrors
+4. System automatically creates real mirror components
+5. Lenses and mirrors adjust to satisfy geometry
+
+#### 4. Movement Behaviors
+
+**Both Lenses Movable**:
+- Entire system moves together (synchronized)
+- Both lenses + all mirrors move by same delta
+- Preserves fold geometry during drag
+- Works like a rigid unit
+
+**One Lens Fixed**:
+- Movable lens can be dragged freely
+- Mirrors stay in place (simplified behavior)
+- Fixed lens remains stationary
+- Path length not strictly enforced during drag
+
+**Mirror Dragging**:
+- When one lens is fixed and one is movable
+- Dragging a mirror recalculates movable lens position
+- Maintains path length constraint
+- For 1 fold: Lens repositions to maintain L-shape
+- For 2 folds: Lens and other mirror reposition for U-shape
+
+**Both Lenses Fixed**:
+- Movement blocked with error message
+- User must unfix at least one lens to move system
+
+#### 5. Rigid Body Rotation
+
+**R Key Behavior**:
+- Press **R**: Rotate system 15° clockwise
+- Press **Shift+R**: Rotate system 15° counter-clockwise
+- Rotation center = midpoint between lenses
+- Entire system rotates as rigid body:
+  - Both lenses rotate by same angle
+  - All mirrors rotate by same angle
+  - All positions rotate around center point
+- Preserves all internal angles and distances
+
+### Geometry Calculations
+
+#### L-Shape (1 Fold) Algorithm
+```javascript
+if (horizontal major) {
+    // Beam goes right/left, then up/down
+    sourceAngle = 0° or 180°
+    mirrorPosition = halfway along horizontal path
+    afterReflectionAngle = 90° or 270°
+    targetPosition = end of vertical segment
+    targetAngle = opposite of beam direction (180° from beam)
+} else {
+    // Beam goes up/down, then right/left
+    sourceAngle = 90° or 270°
+    mirrorPosition = halfway along vertical path
+    afterReflectionAngle = 0° or 180°
+    targetPosition = end of horizontal segment
+    targetAngle = opposite of beam direction
+}
+
+mirrorAngle = 45° to create 90° reflection
+```
+
+#### U-Shape (2 Folds) Algorithm
+```javascript
+segmentLength = pathLength / 3
+
+if (horizontal major) {
+    // Beam goes right, up, back left (or mirrored)
+    mirror1 = sourcePos + (segmentLength in horizontal direction)
+    mirror2 = mirror1 + (segmentLength in vertical direction)
+    target = mirror2 + (segmentLength back toward source)
+    targetAngle = opposite of source (180°)
+} else {
+    // Beam goes up, right, back down (or mirrored)
+    mirror1 = sourcePos + (segmentLength in vertical direction)
+    mirror2 = mirror1 + (segmentLength in horizontal direction)
+    target = mirror2 + (segmentLength back toward source)
+    targetAngle = opposite of source (180°)
+}
+
+Both mirrors at 45° for 90° reflections
+```
+
+### Data Structure
+
+**Constraint Object**:
+```javascript
+{
+    targetComponentId: "L12",
+    targetPathLength: 120.0,      // mm
+    tolerance: 1.0,               // mm
+    foldCount: 0,                 // 0, 1, or 2
+    mirrorIds: ["M_L11_L12"],     // Real mirror component IDs
+    mode: 'foldable'              // 'foldable' vs old 'auto'/'disabled'
+}
+```
+
+**Bidirectional Storage**:
+- Both lenses store the constraint
+- Mirror IDs stored in both constraints
+- Keeps constraints synchronized
+
+### Beam Segment Visualization
+
+**Automatic Creation**:
+- When fold count changes, beam segments are auto-created
+- Segments connect components in sequence:
+  - 0 folds: `Lens1 → Lens2`
+  - 1 fold: `Lens1 → Mirror → Lens2`
+  - 2 folds: `Lens1 → Mirror1 → Mirror2 → Lens2`
+- Old segments automatically removed
+- Visual feedback shows actual beam path through folds
+
+### Mirror Management
+
+**Auto-Creation**:
+- Mirrors created as real `Component` objects with type `'mirror'`
+- Named systematically: `M_L11_L12` or `M1_L11_L12`, `M2_L11_L12`
+- Positioned and angled to create proper reflections
+- Stored in component map like any other component
+
+**Auto-Removal**:
+- When reducing fold count, old mirrors are deleted
+- IDs removed from constraint `mirrorIds` array
+- Beam segments cleaned up
+- No orphaned components left behind
+
+### Files Modified/Created
+
+| File | Changes |
+|------|---------|
+| `js/main.js` | `createPathLengthConstraint()` - H/V validation, fold count UI buttons, `changeFoldCount()`, `updateMirrorsForConstraint()`, `calculateOneFoldGeometry()`, `calculateTwoFoldGeometry()`, `createBeamSegmentsForFoldPath()`, `rotateConstraintSystemRigidBody()`, fold mode toggle in properties panel |
+| `js/state.js` | MOVE_COMPONENT reducer - synchronized movement, one-fixed-one-movable handling, mirror drag behavior, `recalculateLensPositionFromMirror()` for 1-fold and 2-fold cases |
+| `js/models/Component.js` | Already supports nested constraint properties, no changes needed |
+| `js/physics/FoldGeometry.js` | OLD automatic system (now coexists with new manual system) |
+
+### Key Implementation Details
+
+**Constraint Validation** (js/main.js:3240-3301):
+- Checks lens types (only lenses allowed)
+- Validates angle similarity (within 10°)
+- Determines required alignment (H or V) from lens angles
+- Checks actual position alignment (within half grid size)
+- Calculates initial straight-line path length
+
+**Geometry Calculation** (js/main.js:3656-3900):
+- L-shape: Determines H/V based on relative positions, calculates corner mirror position, computes new target position
+- U-shape: Creates return path with two 90° turns, both lenses face opposite directions, maintains equal segment lengths
+
+**Movement Logic** (js/state.js:824-914):
+- Both movable: Move all by same delta (synchronized)
+- One fixed: Allow movable lens to move freely
+- Mirror dragging: Recalculate lens position to maintain path length
+
+**Mirror Dragging Math** (js/state.js:435-528):
+- For 1 fold: Calculate remaining distance, project lens along outgoing beam direction
+- For 2 folds: Recalculate Z-shape maintaining equal segments, update other mirror position
+
+### Usage Examples
+
+**Example 1: Creating L-Shaped Constraint**
+```
+1. Place Lens1 at (0, 0) with angle 0°
+2. Place Lens2 at (100, 0) with angle 0°
+3. Select both lenses
+4. Create path length constraint (120mm)
+5. Click fold count "1"
+   → Mirror appears at (60, 0)
+   → Lens2 moves to (60, 60)
+   → Lens1 angle = 0° (points right)
+   → Lens2 angle = 270° (points up, receives beam)
+   → Mirror angle = 45°
+   → Beam path: Lens1 → Mirror → Lens2 (L-shape)
+```
+
+**Example 2: Rigid Body Rotation**
+```
+1. Create L-shaped constraint (from Example 1)
+2. Select Lens1
+3. Press R key repeatedly
+   → Entire system rotates 15° at a time
+   → Both lenses rotate
+   → Mirror rotates
+   → All positions orbit around center point (30, 30)
+   → L-shape geometry preserved
+```
+
+**Example 3: Mirror Dragging**
+```
+1. Create L-shaped constraint
+2. Fix Lens1 (check isFixed in properties)
+3. Drag the mirror to new position
+   → Lens2 automatically repositions
+   → Path length maintained at 120mm
+   → Lens2 adjusts to receive beam from mirror
+```
+
+### Backward Compatibility
+
+**Old System Coexistence**:
+- Old automatic fold system (`foldMode: 'auto'`) still works
+- New manual system uses `mode: 'foldable'`
+- Code checks which system to use
+- Can have both types of constraints in same file
+
+**Migration**:
+- Existing path length constraints continue working
+- No automatic migration needed
+- Users can recreate constraints with new system
+
+### Known Limitations
+
+1. **One-fixed-one-movable**: Mirrors don't dynamically reposition during lens drag (only when using mirror drag)
+2. **Fold geometry**: Only supports cardinal directions (H/V), not arbitrary angles
+3. **Path length**: Not strictly enforced during one-fixed-one-movable lens drag
+4. **Mirror count**: Limited to 2 folds maximum
+
+### All Phase 9 Features Complete ✅
+
+| Feature | Status |
+|---------|--------|
+| Lens-only constraint creation | ✅ Completed |
+| H/V alignment validation | ✅ Completed |
+| Fold count UI (0/1/2 buttons) | ✅ Completed |
+| Auto mirror creation/removal | ✅ Completed |
+| L-shape geometry (1 fold) | ✅ Completed |
+| U-shape geometry (2 folds) | ✅ Completed |
+| Lens position/rotation adjustment | ✅ Completed |
+| Synchronized movement | ✅ Completed |
+| One-fixed-one-movable behavior | ✅ Completed |
+| Mirror dragging | ✅ Completed |
+| Rigid body rotation (R key) | ✅ Completed |
+| Beam segment visualization | ✅ Completed |
+| Fold mode toggle | ✅ Completed |
+
+---
+
+## Version History
+
+### Version 1.6 (2025-12-04)
+**New Features:**
+- Source light emission control - toggle individual sources on/off with "Emit light when lasers on" checkbox
+- Visual indicator (red X) for disabled sources
+
+**Bug Fixes:**
+- File name input now properly populates when loading documents (bidirectional state sync)
+- Beam splitter reflectance property now correctly controls beam behavior (0-100%)
+- Reflectance slider properly affects which beams are created (reflected/transmitted/both)
+
+**UI Improvements:**
+- Simplified background settings - removed redundant "Clear Image" and "Reset to Default" buttons
+- Cleaner settings modal with only essential controls
+
+### Version 1.5 (2025-12-04)
+Persistent alignment constraints (V/H/U keys), background image persistence, component deselection fixes, toast notification system.

@@ -9,6 +9,10 @@ import { Renderer } from './render/Renderer.js';
 import { ResultsGraph } from './render/ResultsGraph.js';
 import { Optimizer, OptimizerState } from './optimization/Optimizer.js';
 import * as BeamPhysics from './physics/BeamPhysics.js';
+import * as FoldGeometry from './physics/FoldGeometry.js';
+
+// Expose FoldGeometry globally for Renderer
+window.FoldGeometry = FoldGeometry;
 
 /**
  * Main Application Class
@@ -82,6 +86,12 @@ class BeamPathOptimizerApp {
         if (fileNameInput) {
             const state = this.store.getState();
             fileNameInput.value = state.document.name || 'beam-path';
+
+            // Sync file name input changes to state
+            fileNameInput.addEventListener('input', (e) => {
+                const newName = e.target.value.trim() || 'beam-path';
+                this.store.dispatch(actions.updateDocumentName(newName));
+            });
         }
 
         console.log('Beam Path Optimizer initialized', APP_VERSION.toString());
@@ -185,6 +195,22 @@ class BeamPathOptimizerApp {
         // Delete button
         document.getElementById('btn-delete')?.addEventListener('click', () => this.deleteSelected());
         document.getElementById('btn-duplicate')?.addEventListener('click', () => this.duplicateSelected());
+
+        // Path length constraint button
+        document.getElementById('btn-add-path-constraint')?.addEventListener('click', () => {
+            const state = this.store.getState();
+            const selectedIds = state.ui.selection.selectedIds;
+
+            if (selectedIds.length === 2) {
+                // Two components selected - create constraint directly
+                this.createPathLengthConstraint(selectedIds[0], selectedIds[1]);
+            } else if (selectedIds.length === 1) {
+                // One component selected - show selection dialog (future enhancement)
+                this.showToast('Select two lens or beam splitter components to create a path length constraint', 'info');
+            } else {
+                this.showToast('Please select two lens or beam splitter components', 'warning');
+            }
+        });
 
         // Zone property inputs
         this.setupZonePropertyInputs();
@@ -338,6 +364,13 @@ class BeamPathOptimizerApp {
                     reflectance,
                     transmittance: 1 - reflectance
                 }));
+
+                // Re-propagate beams if auto-propagate is enabled
+                if (state.ui.autoPropagate) {
+                    this.clearAllBeams();
+                    this.propagateAllBeams();
+                    this.render();
+                }
             });
         }
 
@@ -419,6 +452,24 @@ class BeamPathOptimizerApp {
      * Set up beam physics property controls
      */
     setupBeamPhysicsControls() {
+        // Emit light toggle (for sources)
+        document.getElementById('prop-emit-light')?.addEventListener('change', (e) => {
+            const state = this.store.getState();
+            const selectedId = state.ui.selection.selectedIds[0];
+            if (!selectedId) return;
+
+            this.store.dispatch(actions.updateComponent(selectedId, {
+                emitLight: e.target.checked
+            }));
+
+            // Re-propagate beams if auto-propagate is enabled
+            if (state.ui.autoPropagate) {
+                this.clearAllBeams();
+                this.propagateAllBeams();
+                this.render();
+            }
+        });
+
         // Shallow angle mode toggle
         const shallowEnabledCheckbox = document.getElementById('prop-shallow-enabled');
         const shallowAngleControls = document.getElementById('shallow-angle-controls');
@@ -753,7 +804,6 @@ class BeamPathOptimizerApp {
         const bgImageInput = document.getElementById('bg-image');
         const btnChooseImage = document.getElementById('btn-choose-image');
         const bgImageName = document.getElementById('bg-image-name');
-        const btnClearImage = document.getElementById('btn-clear-image');
 
         // Open modal
         btnSettings?.addEventListener('click', () => {
@@ -775,11 +825,6 @@ class BeamPathOptimizerApp {
             // Set image name
             if (bgImageName) {
                 bgImageName.textContent = bg.imagePath || 'No image selected';
-            }
-
-            // Show/hide clear button
-            if (btnClearImage) {
-                btnClearImage.classList.toggle('hidden', !bg.imagePath);
             }
 
             modal?.classList.remove('hidden');
@@ -835,7 +880,6 @@ class BeamPathOptimizerApp {
 
                     // Update UI
                     if (bgImageName) bgImageName.textContent = file.name;
-                    if (btnClearImage) btnClearImage.classList.remove('hidden');
 
                     // Set radio to image
                     bgTypeRadios.forEach(radio => {
@@ -845,48 +889,6 @@ class BeamPathOptimizerApp {
                 img.src = event.target.result;
             };
             reader.readAsDataURL(file);
-        });
-
-        // Clear image
-        btnClearImage?.addEventListener('click', () => {
-            this.store.dispatch(actions.setBackground({
-                type: 'color',
-                imagePath: null,
-                imageData: null
-            }));
-
-            // Update UI
-            if (bgImageName) bgImageName.textContent = 'No image selected';
-            btnClearImage?.classList.add('hidden');
-            if (bgImageInput) bgImageInput.value = '';
-
-            // Set radio to color
-            bgTypeRadios.forEach(radio => {
-                radio.checked = radio.value === 'color';
-            });
-        });
-
-        // Reset background to default
-        const btnResetBackground = document.getElementById('btn-reset-background');
-        btnResetBackground?.addEventListener('click', () => {
-            this.store.dispatch(actions.setBackground({
-                type: 'color',
-                color: '#0d1117',
-                imagePath: null,
-                imageData: null
-            }));
-
-            // Sync UI
-            if (bgColorInput) bgColorInput.value = '#0d1117';
-            if (bgColorValue) bgColorValue.textContent = '#0d1117';
-            bgTypeRadios.forEach(radio => {
-                radio.checked = radio.value === 'color';
-            });
-            if (bgImageName) bgImageName.textContent = 'No image selected';
-            if (btnClearImage) btnClearImage.classList.add('hidden');
-            if (bgImageInput) bgImageInput.value = '';
-
-            this.showToast('Background reset to default', 'success');
         });
 
         // Opacity slider
@@ -1335,6 +1337,16 @@ class BeamPathOptimizerApp {
             this.openResultsView();
         });
 
+        // Show optimizer button
+        document.getElementById('btn-show-optimizer')?.addEventListener('click', () => {
+            this.showOptimizerSection();
+        });
+
+        // Hide optimizer button
+        document.getElementById('btn-hide-optimizer')?.addEventListener('click', () => {
+            this.hideOptimizerSection();
+        });
+
         // Set up results view controls
         this.setupResultsViewControls();
 
@@ -1530,6 +1542,44 @@ class BeamPathOptimizerApp {
             footprint: footprint / total,
             pathLength: pathLength / total
         };
+    }
+
+    /**
+     * Show optimizer section
+     */
+    showOptimizerSection() {
+        const optimizerSection = document.getElementById('optimizer-section');
+        const optimizerToggle = document.getElementById('optimizer-toggle-container');
+        const selectionSection = document.getElementById('selection-info');
+
+        optimizerSection.classList.remove('hidden');
+        optimizerToggle.classList.add('hidden');
+
+        // Also hide properties section when showing optimizer
+        selectionSection.classList.add('hidden');
+    }
+
+    /**
+     * Hide optimizer section
+     */
+    hideOptimizerSection() {
+        const optimizerSection = document.getElementById('optimizer-section');
+        const optimizerToggle = document.getElementById('optimizer-toggle-container');
+        const state = this.store.getState();
+
+        optimizerSection.classList.add('hidden');
+
+        // Only show toggle button if nothing is selected
+        const hasSelection = state.ui.selection.type === 'component' ||
+                           state.ui.selection.type === 'zone' ||
+                           state.ui.selection.type === 'segment';
+
+        if (!hasSelection) {
+            optimizerToggle.classList.remove('hidden');
+        }
+
+        // Re-render to update properties panel visibility
+        this.render();
     }
 
     /**
@@ -1847,17 +1897,36 @@ class BeamPathOptimizerApp {
                         }
                     });
                 }
+
+                // Add fold-constrained partners to dragOriginalPositions to preserve geometry
+                // This ensures both components in a fold constraint move together as a unit
+                const componentsToCheck = Array.from(this.dragOriginalPositions.keys());
+                componentsToCheck.forEach(id => {
+                    const comp = state.components.get(id);
+                    if (comp && comp.pathLengthConstraints) {
+                        comp.pathLengthConstraints.forEach(constraint => {
+                            if (constraint.foldMode === 'auto') {
+                                const partner = state.components.get(constraint.targetComponentId);
+                                if (partner && !this.dragOriginalPositions.has(partner.id)) {
+                                    this.dragOriginalPositions.set(partner.id, { ...partner.position });
+                                }
+                            }
+                        });
+                    }
+                });
             } else if (clickedZone) {
                 // Clicked on a zone
                 this.store.dispatch(actions.selectZone(clickedZone.id));
-                // Start dragging zone
-                this.isDragging = true;
-                this.dragStart = worldPos;
-                this.dragZone = clickedZone;
-                this.dragZoneOffset = {
-                    x: worldPos.x - clickedZone.zone.bounds.x,
-                    y: worldPos.y - clickedZone.zone.bounds.y
-                };
+                // Start dragging zone only if not fixed
+                if (!clickedZone.zone.isFixed) {
+                    this.isDragging = true;
+                    this.dragStart = worldPos;
+                    this.dragZone = clickedZone;
+                    this.dragZoneOffset = {
+                        x: worldPos.x - clickedZone.zone.bounds.x,
+                        y: worldPos.y - clickedZone.zone.bounds.y
+                    };
+                }
             } else {
                 // Clicked on empty area - start selection box
                 this.store.dispatch(actions.clearSelection());
@@ -2176,6 +2245,8 @@ class BeamPathOptimizerApp {
                     width: Math.abs(worldPos.x - this.zoneStart.x),
                     height: Math.abs(worldPos.y - this.zoneStart.y)
                 },
+                rotation: 0,  // Rotation angle in degrees (45° increments)
+                isFixed: false,  // Whether zone location is fixed
                 isActive: true
             };
 
@@ -2255,17 +2326,25 @@ class BeamPathOptimizerApp {
             case 'C':
                 this.setTool('connect');
                 break;
+            case 'o':
+            case 'O':
+                this.toggleLaser();
+                break;
             case 'l':
             case 'L':
-                this.toggleLaser();
+                this.startPlacingComponent(ComponentType.LENS);
                 break;
             case 'r':
             case 'R':
-                this.rotateSelectedComponents();
+                this.rotateSelectedComponents(e);
                 break;
             case 'u':
             case 'U':
                 this.unconstrainSelectedComponents();
+                break;
+            case 'f':
+            case 'F':
+                this.toggleFixSelected();
                 break;
             case 'm':
             case 'M':
@@ -2284,21 +2363,24 @@ class BeamPathOptimizerApp {
             case 'B':
                 this.startPlacingComponent(ComponentType.BEAM_SPLITTER);
                 break;
-            case 'n':
-            case 'N':
-                this.startPlacingComponent(ComponentType.LENS);
-                break;
             case 'w':
             case 'W':
                 this.startPlacingComponent(ComponentType.WAVEPLATE);
                 break;
-            case 'f':
-            case 'F':
+            case 'i':
+            case 'I':
                 this.startPlacingComponent(ComponentType.FILTER);
                 break;
             case 'd':
             case 'D':
                 this.startPlacingComponent(ComponentType.DETECTOR);
+                break;
+            case 'a':
+            case 'A':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    this.selectAllComponents();
+                }
                 break;
             case 'z':
             case 'Z':
@@ -2309,6 +2391,9 @@ class BeamPathOptimizerApp {
                     } else {
                         this.undo();
                     }
+                } else {
+                    // Toggle mount zone for selected components
+                    this.toggleMountZoneSelected();
                 }
                 break;
             case 'y':
@@ -2785,10 +2870,26 @@ class BeamPathOptimizerApp {
         if (source.type === ComponentType.MIRROR) {
             sourcePort = 'reflected';
         } else if (source.type === ComponentType.BEAM_SPLITTER) {
-            // Check if reflected port is already used
+            // Determine available ports based on reflectance/transmittance
+            const reflectance = source.reflectance ?? 0.5;
+            const transmittance = source.transmittance ?? (1 - reflectance);
+
             const existingSegments = state.beamPath.getOutgoingSegments(source.id);
             const usedPorts = existingSegments.map(s => s.sourcePort);
-            sourcePort = usedPorts.includes('reflected') ? 'transmitted' : 'reflected';
+
+            // Prefer reflected port if available and reflectance > 0
+            if (!usedPorts.includes('reflected') && reflectance > 0) {
+                sourcePort = 'reflected';
+            } else if (!usedPorts.includes('transmitted') && transmittance > 0) {
+                sourcePort = 'transmitted';
+            } else if (reflectance > 0) {
+                sourcePort = 'reflected';
+            } else if (transmittance > 0) {
+                sourcePort = 'transmitted';
+            } else {
+                // Both are zero - shouldn't happen but default to reflected
+                sourcePort = 'reflected';
+            }
         } else if (source.splitsBeam && source.splitsBeam()) {
             sourcePort = 'transmitted';
         }
@@ -2957,21 +3058,223 @@ class BeamPathOptimizerApp {
                     x: component.position.x + 30,
                     y: component.position.y + 30
                 };
+
+                // Generate smart incremented name instead of adding "(copy)"
+                clone.name = this.generateIncrementedName(component.name, state.components);
+
                 this.store.dispatch(actions.addComponent(clone));
             }
         });
     }
 
     /**
+     * Generate an incremented name for a duplicated component
+     * E.g., M2 -> M3, or M3 -> M4 (if M3 exists, try M4, M5, etc.)
+     */
+    generateIncrementedName(baseName, components) {
+        // Remove ' (copy)' suffix if it exists (from old clones)
+        baseName = baseName.replace(/\s*\(copy\)$/i, '');
+
+        // Extract base name and number
+        // Match patterns like "M2", "Mirror 3", "L1", "Lens1", etc.
+        const match = baseName.match(/^(.*?)(\d+)$/);
+
+        let namePrefix, currentNumber;
+        if (match) {
+            namePrefix = match[1];  // "M", "Mirror ", "L", etc.
+            currentNumber = parseInt(match[2], 10);  // 2, 3, 1, etc.
+        } else {
+            // No number in name, treat whole thing as prefix and start at 1
+            namePrefix = baseName;
+            currentNumber = 0;
+        }
+
+        // Find the next available number
+        let nextNumber = currentNumber + 1;
+        let candidateName = namePrefix + nextNumber;
+
+        // Keep incrementing until we find an unused name
+        while (Array.from(components.values()).some(comp => comp.name === candidateName)) {
+            nextNumber++;
+            candidateName = namePrefix + nextNumber;
+        }
+
+        return candidateName;
+    }
+
+    /**
+     * Select all components
+     */
+    selectAllComponents() {
+        const state = this.store.getState();
+        const allComponentIds = Array.from(state.components.keys());
+
+        if (allComponentIds.length > 0) {
+            this.store.dispatch(actions.selectMultiple(allComponentIds));
+            this.showToast(`Selected ${allComponentIds.length} component(s)`, 'info');
+        }
+    }
+
+    /**
+     * Toggle fixed state for selected components or zones
+     */
+    toggleFixSelected() {
+        const state = this.store.getState();
+
+        // Handle zone fixing
+        if (state.ui.selection.type === 'zone' && state.ui.selection.selectedIds.length > 0) {
+            state.ui.selection.selectedIds.forEach(fullId => {
+                const [type, id] = fullId.split(':');
+
+                if (type === 'mounting') {
+                    const zone = state.constraints.mountingZone;
+                    if (zone) {
+                        const newFixed = !zone.isFixed;
+                        this.store.dispatch(actions.updateMountingZone({ isFixed: newFixed }));
+                        this.showToast(`Mounting zone ${newFixed ? 'fixed' : 'unfixed'}`, 'info');
+                    }
+                } else if (type === 'keepout') {
+                    const zone = state.constraints.keepOutZones.find(z => z.id === id);
+                    if (zone) {
+                        const newFixed = !zone.isFixed;
+                        this.store.dispatch(actions.updateKeepOutZone(id, { isFixed: newFixed }));
+                        this.showToast(`Keep-out zone ${newFixed ? 'fixed' : 'unfixed'}`, 'info');
+                    }
+                }
+            });
+            return;
+        }
+
+        // Handle component fixing
+        if (state.ui.selection.type === 'component' && state.ui.selection.selectedIds.length > 0) {
+            let fixedCount = 0;
+            let unfixedCount = 0;
+
+            state.ui.selection.selectedIds.forEach(id => {
+                const component = state.components.get(id);
+                if (component) {
+                    const newFixed = !component.isFixed;
+                    const newAngleFixed = !component.isAngleFixed;
+
+                    this.store.dispatch(actions.updateComponent(id, {
+                        isFixed: newFixed,
+                        isAngleFixed: newAngleFixed
+                    }));
+
+                    if (newFixed) {
+                        fixedCount++;
+                    } else {
+                        unfixedCount++;
+                    }
+                }
+            });
+
+            if (fixedCount > 0) {
+                this.showToast(`Fixed ${fixedCount} component(s)`, 'info');
+            } else if (unfixedCount > 0) {
+                this.showToast(`Unfixed ${unfixedCount} component(s)`, 'info');
+            }
+        }
+    }
+
+    /**
+     * Toggle mount zone enabled state for selected components
+     */
+    toggleMountZoneSelected() {
+        const state = this.store.getState();
+
+        if (state.ui.selection.type === 'component' && state.ui.selection.selectedIds.length > 0) {
+            let enabledCount = 0;
+            let disabledCount = 0;
+
+            state.ui.selection.selectedIds.forEach(id => {
+                const component = state.components.get(id);
+                if (component) {
+                    const currentEnabled = component.mountZone?.enabled || false;
+                    const newEnabled = !currentEnabled;
+
+                    // Ensure mountZone object exists
+                    const updatedMountZone = {
+                        ...(component.mountZone || {}),
+                        enabled: newEnabled
+                    };
+
+                    this.store.dispatch(actions.updateComponent(id, {
+                        mountZone: updatedMountZone
+                    }));
+
+                    if (newEnabled) {
+                        enabledCount++;
+                    } else {
+                        disabledCount++;
+                    }
+                }
+            });
+
+            if (enabledCount > 0) {
+                this.showToast(`Enabled mount zone for ${enabledCount} component(s)`, 'info');
+            } else if (disabledCount > 0) {
+                this.showToast(`Disabled mount zone for ${disabledCount} component(s)`, 'info');
+            }
+        }
+    }
+
+    /**
      * Rotate selected components by 90 degrees clockwise
      */
-    rotateSelectedComponents() {
+    rotateSelectedComponents(event) {
         const state = this.store.getState();
+
+        // Handle zone rotation (45° increments)
+        if (state.ui.selection.type === 'zone' && state.ui.selection.selectedIds.length > 0) {
+            const angleDelta = event && event.shiftKey ? -45 : 45;
+            let fixedCount = 0;
+            let rotatedCount = 0;
+
+            state.ui.selection.selectedIds.forEach(fullId => {
+                const [type, id] = fullId.split(':');
+
+                if (type === 'mounting') {
+                    const zone = state.constraints.mountingZone;
+                    if (zone) {
+                        if (zone.isFixed) {
+                            fixedCount++;
+                        } else {
+                            const newRotation = ((zone.rotation || 0) + angleDelta + 360) % 360;
+                            this.store.dispatch(actions.updateMountingZone({ rotation: newRotation }));
+                            rotatedCount++;
+                        }
+                    }
+                } else if (type === 'keepout') {
+                    const zone = state.constraints.keepOutZones.find(z => z.id === id);
+                    if (zone) {
+                        if (zone.isFixed) {
+                            fixedCount++;
+                        } else {
+                            const newRotation = ((zone.rotation || 0) + angleDelta + 360) % 360;
+                            this.store.dispatch(actions.updateKeepOutZone(id, { rotation: newRotation }));
+                            rotatedCount++;
+                        }
+                    }
+                }
+            });
+
+            // Show feedback for fixed zones
+            if (fixedCount > 0 && rotatedCount === 0) {
+                this.showToast('Cannot rotate: zone is fixed', 'warning');
+            } else if (fixedCount > 0) {
+                this.showToast(`Rotated ${rotatedCount} zone(s), ${fixedCount} fixed`, 'warning');
+            }
+            return;
+        }
 
         // Only works for component selection
         if (state.ui.selection.type !== 'component' || state.ui.selection.selectedIds.length === 0) {
             return;
         }
+
+        // Determine rotation angle: 90° clockwise, -90° with Shift
+        const angleDelta = event && event.shiftKey ? -90 : 90;
 
         let fixedCount = 0;
         let rotatedCount = 0;
@@ -2982,9 +3285,25 @@ class BeamPathOptimizerApp {
                 if (component.isAngleFixed) {
                     fixedCount++;
                 } else {
-                    // Rotate 90 degrees clockwise, wrap at 360
-                    const newAngle = (component.angle + 90) % 360;
-                    this.store.dispatch(actions.updateComponent(id, { angle: newAngle }));
+                    // Check if component has foldable constraints (NEW manual system)
+                    const hasFoldableConstraints = component.pathLengthConstraints?.some(c => c.mode === 'foldable');
+
+                    if (hasFoldableConstraints) {
+                        // Use rigid body rotation for foldable constrained components
+                        this.rotateConstraintSystemRigidBody(id, angleDelta);
+                    } else {
+                        // Check for old auto fold constraints
+                        const hasAutoFoldConstraints = component.pathLengthConstraints?.some(c => c.foldMode === 'auto');
+
+                        if (hasAutoFoldConstraints) {
+                            // Use synchronized rotation for old fold-constrained components
+                            this.store.dispatch(actions.rotateConstrainedPair(id, angleDelta));
+                        } else {
+                            // Regular rotation for non-constrained components
+                            const newAngle = (component.angle + angleDelta + 360) % 360;
+                            this.store.dispatch(actions.updateComponent(id, { angle: newAngle }));
+                        }
+                    }
                     rotatedCount++;
                 }
             }
@@ -3186,11 +3505,678 @@ class BeamPathOptimizerApp {
     }
 
     /**
+     * Create a path length constraint between two lenses
+     * New system: manual fold control with real mirrors
+     */
+    createPathLengthConstraint(sourceId, targetId) {
+        const state = this.store.getState();
+        const source = state.components.get(sourceId);
+        const target = state.components.get(targetId);
+
+        if (!source || !target) {
+            this.showToast('Invalid components for path length constraint', 'error');
+            return;
+        }
+
+        // Validate component types (ONLY lenses)
+        if (source.type !== 'lens' || target.type !== 'lens') {
+            this.showToast('Path length constraints only work with lenses', 'warning');
+            return;
+        }
+
+        // Validate H/V alignment based on lens angles
+        const angle1 = BeamPhysics.normalizeAngle(source.angle);
+        const angle2 = BeamPhysics.normalizeAngle(target.angle);
+
+        // Check if angles are roughly the same (within 10 degrees)
+        let angleDiff = Math.abs(angle2 - angle1);
+        if (angleDiff > 180) angleDiff = 360 - angleDiff;
+
+        if (angleDiff > 10) {
+            this.showToast('Lenses must have same orientation to create constraint', 'warning');
+            return;
+        }
+
+        // Determine required alignment based on lens angle
+        const avgAngle = (angle1 + angle2) / 2;
+        let requiredAlignment;
+        let alignmentAxis;
+
+        if (avgAngle < 45 || avgAngle > 315) {
+            // Horizontal lenses (~0°) → must be horizontally aligned (same Y)
+            requiredAlignment = 'horizontal';
+            alignmentAxis = 'Y';
+        } else if (avgAngle > 45 && avgAngle < 135) {
+            // Vertical lenses (~90°) → must be vertically aligned (same X)
+            requiredAlignment = 'vertical';
+            alignmentAxis = 'X';
+        } else if (avgAngle > 135 && avgAngle < 225) {
+            // Horizontal lenses (~180°) → must be horizontally aligned (same Y)
+            requiredAlignment = 'horizontal';
+            alignmentAxis = 'Y';
+        } else {
+            // Vertical lenses (~270°) → must be vertically aligned (same X)
+            requiredAlignment = 'vertical';
+            alignmentAxis = 'X';
+        }
+
+        // Check alignment
+        const positionDiff = requiredAlignment === 'horizontal'
+            ? Math.abs(source.position.y - target.position.y)
+            : Math.abs(source.position.x - target.position.x);
+
+        const gridSize = state.grid?.size || 25;
+        if (positionDiff > gridSize / 2) {
+            this.showToast(`Lenses must be ${requiredAlignment}ly aligned (same ${alignmentAxis})`, 'warning');
+            return;
+        }
+
+        // Calculate path length (straight line distance)
+        const dx = target.position.x - source.position.x;
+        const dy = target.position.y - source.position.y;
+        const pathLength = Math.sqrt(dx * dx + dy * dy);
+
+        // Create bidirectional constraints with NEW data structure
+        const tolerance = 1.0; // mm
+
+        // Add constraint to source component
+        const sourceConstraints = [...(source.pathLengthConstraints || [])];
+        sourceConstraints.push({
+            targetComponentId: targetId,
+            targetPathLength: pathLength,
+            tolerance: tolerance,
+            foldCount: 0,          // Always start with 0 folds
+            mirrorIds: [],         // No mirrors initially
+            mode: 'foldable'       // New manual fold system
+        });
+
+        // Add constraint to target component
+        const targetConstraints = [...(target.pathLengthConstraints || [])];
+        targetConstraints.push({
+            targetComponentId: sourceId,
+            targetPathLength: pathLength,
+            tolerance: tolerance,
+            foldCount: 0,          // Always start with 0 folds
+            mirrorIds: [],         // No mirrors initially
+            mode: 'foldable'       // New manual fold system
+        });
+
+        // Update both components
+        this.store.dispatch(actions.updateComponent(sourceId, {
+            pathLengthConstraints: sourceConstraints
+        }));
+        this.store.dispatch(actions.updateComponent(targetId, {
+            pathLengthConstraints: targetConstraints
+        }));
+
+        this.showToast(`Path length constraint: ${source.name} ↔ ${target.name} (${pathLength.toFixed(1)} mm)`, 'success');
+    }
+
+    /**
+     * Create a direct beam segment between two components
+     */
+    createDirectBeamSegment(sourceId, targetId) {
+        const state = this.store.getState();
+        const source = state.components.get(sourceId);
+        const target = state.components.get(targetId);
+
+        if (!source || !target) return null;
+
+        const beamAngle = BeamPhysics.calculateBeamAngle(source.position, target.position);
+        const beamDirection = BeamPhysics.angleToVector(beamAngle);
+        const pathLength = Math.sqrt(
+            Math.pow(target.position.x - source.position.x, 2) +
+            Math.pow(target.position.y - source.position.y, 2)
+        );
+
+        return new BeamSegment({
+            sourceId: sourceId,
+            targetId: targetId,
+            sourcePort: 'output',
+            targetPort: 'input',
+            direction: beamDirection,
+            directionAngle: beamAngle,
+            pathLength: pathLength,
+            autoCreated: true,
+            isPersistent: true
+        });
+    }
+
+    /**
+     * Remove a path length constraint between two components
+     */
+    removePathLengthConstraint(sourceId, targetId) {
+        const state = this.store.getState();
+        const source = state.components.get(sourceId);
+        const target = state.components.get(targetId);
+
+        if (!source || !target) return;
+
+        // Remove constraint from source
+        if (source.pathLengthConstraints) {
+            const sourceConstraints = source.pathLengthConstraints.filter(
+                c => c.targetComponentId !== targetId
+            );
+            this.store.dispatch(actions.updateComponent(sourceId, {
+                pathLengthConstraints: sourceConstraints
+            }));
+        }
+
+        // Remove constraint from target
+        if (target.pathLengthConstraints) {
+            const targetConstraints = target.pathLengthConstraints.filter(
+                c => c.targetComponentId !== sourceId
+            );
+            this.store.dispatch(actions.updateComponent(targetId, {
+                pathLengthConstraints: targetConstraints
+            }));
+        }
+
+        this.showToast('Path length constraint removed', 'success');
+    }
+
+    /**
+     * Change fold count for a path length constraint
+     * This will create/remove mirrors and recalculate geometry
+     */
+    changeFoldCount(sourceId, targetId, newFoldCount) {
+        const state = this.store.getState();
+        const source = state.components.get(sourceId);
+        const target = state.components.get(targetId);
+
+        if (!source || !target) {
+            this.showToast('Components not found', 'error');
+            return;
+        }
+
+        // Find the constraint
+        const sourceConstraint = source.pathLengthConstraints?.find(c => c.targetComponentId === targetId);
+        if (!sourceConstraint || sourceConstraint.mode !== 'foldable') {
+            this.showToast('Constraint not found', 'error');
+            return;
+        }
+
+        const oldFoldCount = sourceConstraint.foldCount || 0;
+        if (oldFoldCount === newFoldCount) return; // No change
+
+        // Update both constraints with new fold count
+        const updatedSourceConstraints = source.pathLengthConstraints.map(c => {
+            if (c.targetComponentId === targetId) {
+                return { ...c, foldCount: newFoldCount };
+            }
+            return c;
+        });
+
+        const updatedTargetConstraints = target.pathLengthConstraints.map(c => {
+            if (c.targetComponentId === sourceId) {
+                return { ...c, foldCount: newFoldCount };
+            }
+            return c;
+        });
+
+        this.store.dispatch(actions.updateComponent(sourceId, {
+            pathLengthConstraints: updatedSourceConstraints
+        }));
+
+        this.store.dispatch(actions.updateComponent(targetId, {
+            pathLengthConstraints: updatedTargetConstraints
+        }));
+
+        // Phase 3 & 4: Create/remove mirrors and calculate positions
+        this.updateMirrorsForConstraint(sourceId, targetId, newFoldCount);
+
+        this.showToast(`Fold count changed to ${newFoldCount}`, 'success');
+    }
+
+    /**
+     * Create/remove mirrors and calculate positions for a fold constraint
+     */
+    updateMirrorsForConstraint(sourceId, targetId, foldCount) {
+        const state = this.store.getState();
+        const source = state.components.get(sourceId);
+        const target = state.components.get(targetId);
+
+        if (!source || !target) return;
+
+        const sourceConstraint = source.pathLengthConstraints?.find(c => c.targetComponentId === targetId);
+        if (!sourceConstraint) return;
+
+        // Delete old mirrors
+        const oldMirrorIds = sourceConstraint.mirrorIds || [];
+        oldMirrorIds.forEach(mirrorId => {
+            this.store.dispatch(actions.deleteComponent(mirrorId));
+        });
+
+        // Create new mirrors based on fold count
+        const newMirrorIds = [];
+        const pathLength = sourceConstraint.targetPathLength;
+
+        if (foldCount === 0) {
+            // No mirrors, restore lenses to original H/V alignment
+            // Determine alignment based on positions
+            const dx = target.position.x - source.position.x;
+            const dy = target.position.y - source.position.y;
+
+            // Restore original angles based on alignment
+            if (Math.abs(dx) > Math.abs(dy)) {
+                // Horizontal alignment
+                this.store.dispatch(actions.updateComponent(sourceId, {
+                    angle: dx > 0 ? 0 : 180
+                }));
+                this.store.dispatch(actions.updateComponent(targetId, {
+                    angle: dx > 0 ? 0 : 180
+                }));
+            } else {
+                // Vertical alignment
+                this.store.dispatch(actions.updateComponent(sourceId, {
+                    angle: dy > 0 ? 90 : 270
+                }));
+                this.store.dispatch(actions.updateComponent(targetId, {
+                    angle: dy > 0 ? 90 : 270
+                }));
+            }
+
+            // Create direct beam segment
+            this.createBeamSegmentsForFoldPath(sourceId, targetId);
+        } else if (foldCount === 1) {
+            // 1 mirror: L-shaped path
+            // Calculate mirror position and angles
+            const geometry = this.calculateOneFoldGeometry(source, target, pathLength);
+
+            if (geometry) {
+                // Create mirror
+                const mirror = new Component({
+                    type: ComponentType.MIRROR,
+                    position: geometry.mirrorPosition,
+                    angle: geometry.mirrorAngle,
+                    name: `M_${source.name}_${target.name}`
+                });
+
+                this.store.dispatch(actions.addComponent(mirror));
+                newMirrorIds.push(mirror.id);
+
+                // Move and rotate lenses to match fold geometry
+                this.store.dispatch(actions.updateComponent(sourceId, {
+                    angle: geometry.sourceAngle
+                }));
+                this.store.dispatch(actions.updateComponent(targetId, {
+                    position: geometry.targetPosition,
+                    angle: geometry.targetAngle
+                }));
+
+                // Create beam segments to visualize path
+                this.createBeamSegmentsForFoldPath(sourceId, mirror.id, targetId);
+            }
+        } else if (foldCount === 2) {
+            // 2 mirrors: Z-shaped path
+            const geometry = this.calculateTwoFoldGeometry(source, target, pathLength);
+
+            if (geometry) {
+                // Create first mirror
+                const mirror1 = new Component({
+                    type: ComponentType.MIRROR,
+                    position: geometry.mirror1Position,
+                    angle: geometry.mirror1Angle,
+                    name: `M1_${source.name}_${target.name}`
+                });
+
+                this.store.dispatch(actions.addComponent(mirror1));
+                newMirrorIds.push(mirror1.id);
+
+                // Create second mirror
+                const mirror2 = new Component({
+                    type: ComponentType.MIRROR,
+                    position: geometry.mirror2Position,
+                    angle: geometry.mirror2Angle,
+                    name: `M2_${source.name}_${target.name}`
+                });
+
+                this.store.dispatch(actions.addComponent(mirror2));
+                newMirrorIds.push(mirror2.id);
+
+                // Move and rotate lenses to match fold geometry
+                this.store.dispatch(actions.updateComponent(sourceId, {
+                    angle: geometry.sourceAngle
+                }));
+                this.store.dispatch(actions.updateComponent(targetId, {
+                    position: geometry.targetPosition,
+                    angle: geometry.targetAngle
+                }));
+
+                // Create beam segments to visualize path
+                this.createBeamSegmentsForFoldPath(sourceId, mirror1.id, mirror2.id, targetId);
+            }
+        }
+
+        // Update constraint with new mirror IDs
+        const freshState = this.store.getState();
+        const freshSource = freshState.components.get(sourceId);
+        const freshTarget = freshState.components.get(targetId);
+
+        if (freshSource) {
+            const updatedSourceConstraints = freshSource.pathLengthConstraints.map(c => {
+                if (c.targetComponentId === targetId) {
+                    return { ...c, mirrorIds: newMirrorIds };
+                }
+                return c;
+            });
+
+            this.store.dispatch(actions.updateComponent(sourceId, {
+                pathLengthConstraints: updatedSourceConstraints
+            }));
+        }
+
+        if (freshTarget) {
+            const updatedTargetConstraints = freshTarget.pathLengthConstraints.map(c => {
+                if (c.targetComponentId === sourceId) {
+                    return { ...c, mirrorIds: newMirrorIds };
+                }
+                return c;
+            });
+
+            this.store.dispatch(actions.updateComponent(targetId, {
+                pathLengthConstraints: updatedTargetConstraints
+            }));
+        }
+    }
+
+    /**
+     * Create beam segments to visualize fold path
+     */
+    createBeamSegmentsForFoldPath(...componentIds) {
+        // componentIds can be: [source, mirror, target] for 1 fold
+        // or [source, mirror1, mirror2, target] for 2 folds
+
+        const state = this.store.getState();
+
+        // Remove any existing beam segments between these components
+        const idsSet = new Set(componentIds);
+        state.beamPath.getAllSegments().forEach(seg => {
+            if (idsSet.has(seg.sourceId) || idsSet.has(seg.targetId)) {
+                this.store.dispatch(actions.deleteBeamSegment(seg.id));
+            }
+        });
+
+        // Create new segments connecting components in sequence
+        for (let i = 0; i < componentIds.length - 1; i++) {
+            const sourceId = componentIds[i];
+            const targetId = componentIds[i + 1];
+
+            const sourceComp = state.components.get(sourceId);
+            const targetComp = state.components.get(targetId);
+
+            if (!sourceComp || !targetComp) continue;
+
+            // Calculate segment
+            const segment = this.createDirectBeamSegment(sourceId, targetId);
+            if (segment) {
+                this.store.dispatch(actions.addBeamSegment(segment));
+            }
+        }
+    }
+
+    /**
+     * Calculate geometry for 1 fold (L-shaped path)
+     */
+    calculateOneFoldGeometry(source, target, pathLength) {
+        // For 1 fold: L-shaped path with 90° turn at mirror
+        // Key insight: For an L, if source is horizontal, beam goes right then turns 90° up/down
+
+        const dx = target.position.x - source.position.x;
+        const dy = target.position.y - source.position.y;
+
+        // Determine if we're primarily horizontal or vertical
+        const isHorizontalMajor = Math.abs(dx) > Math.abs(dy);
+
+        let sourceAngle, mirrorPos, afterReflectionAngle, mirrorAngle, targetAngle;
+
+        if (isHorizontalMajor) {
+            // Horizontal then vertical L-shape
+            // Source points right (0°) or left (180°)
+            sourceAngle = dx > 0 ? 0 : 180;
+
+            // Split path length in half for each segment
+            const horizontalDist = pathLength / 2;
+            const verticalDist = pathLength / 2;
+
+            // Mirror at the corner of the L
+            mirrorPos = {
+                x: source.position.x + (dx > 0 ? horizontalDist : -horizontalDist),
+                y: source.position.y
+            };
+
+            // Beam turns 90° (up or down based on target position)
+            afterReflectionAngle = dy > 0 ? 90 : 270;
+
+            // Mirror at 45° to create 90° reflection
+            mirrorAngle = dx > 0 ? (dy > 0 ? 45 : 315) : (dy > 0 ? 135 : 225);
+
+            // Target lens position at end of vertical segment
+            const targetPos = {
+                x: mirrorPos.x,
+                y: mirrorPos.y + (dy > 0 ? verticalDist : -verticalDist)
+            };
+
+            // Target lens faces INCOMING beam
+            targetAngle = (afterReflectionAngle + 180) % 360;
+
+            return {
+                mirrorPosition: mirrorPos,
+                mirrorAngle: mirrorAngle,
+                sourceAngle: sourceAngle,
+                targetAngle: targetAngle,
+                targetPosition: targetPos
+            };
+
+        } else {
+            // Vertical then horizontal L-shape
+            // Source points up (90°) or down (270°)
+            sourceAngle = dy > 0 ? 90 : 270;
+
+            const verticalDist = pathLength / 2;
+            const horizontalDist = pathLength / 2;
+
+            // Mirror at the corner of the L
+            mirrorPos = {
+                x: source.position.x,
+                y: source.position.y + (dy > 0 ? verticalDist : -verticalDist)
+            };
+
+            // Beam turns 90° (left or right based on target position)
+            afterReflectionAngle = dx > 0 ? 0 : 180;
+
+            // Mirror at 45° to create 90° reflection
+            mirrorAngle = dy > 0 ? (dx > 0 ? 45 : 135) : (dx > 0 ? 315 : 225);
+
+            // Target lens position at end of horizontal segment
+            const targetPos = {
+                x: mirrorPos.x + (dx > 0 ? horizontalDist : -horizontalDist),
+                y: mirrorPos.y
+            };
+
+            // Target lens faces INCOMING beam
+            targetAngle = (afterReflectionAngle + 180) % 360;
+
+            return {
+                mirrorPosition: mirrorPos,
+                mirrorAngle: mirrorAngle,
+                sourceAngle: sourceAngle,
+                targetAngle: targetAngle,
+                targetPosition: targetPos
+            };
+        }
+    }
+
+    /**
+     * Rotate entire constraint system as a rigid body
+     * Rotates both lenses + all mirrors around the center point
+     */
+    rotateConstraintSystemRigidBody(componentId, angleDelta) {
+        const state = this.store.getState();
+        const component = state.components.get(componentId);
+
+        if (!component) return;
+
+        // Find foldable constraint
+        const constraint = component.pathLengthConstraints?.find(c => c.mode === 'foldable');
+        if (!constraint) return;
+
+        const partner = state.components.get(constraint.targetComponentId);
+        if (!partner) return;
+
+        // Calculate rotation center (midpoint between lenses)
+        const centerX = (component.position.x + partner.position.x) / 2;
+        const centerY = (component.position.y + partner.position.y) / 2;
+
+        const angleDeltaRad = angleDelta * Math.PI / 180;
+        const cosAngle = Math.cos(angleDeltaRad);
+        const sinAngle = Math.sin(angleDeltaRad);
+
+        // Collect all components to rotate
+        const componentsToRotate = [
+            { id: componentId, comp: component },
+            { id: constraint.targetComponentId, comp: partner }
+        ];
+
+        // Add mirrors
+        (constraint.mirrorIds || []).forEach(mirrorId => {
+            const mirror = state.components.get(mirrorId);
+            if (mirror) {
+                componentsToRotate.push({ id: mirrorId, comp: mirror });
+            }
+        });
+
+        // Rotate each component
+        componentsToRotate.forEach(({ id, comp }) => {
+            // Translate to origin
+            const relX = comp.position.x - centerX;
+            const relY = comp.position.y - centerY;
+
+            // Rotate
+            const rotatedX = relX * cosAngle - relY * sinAngle;
+            const rotatedY = relX * sinAngle + relY * cosAngle;
+
+            // Translate back
+            const newPos = {
+                x: rotatedX + centerX,
+                y: rotatedY + centerY
+            };
+
+            // Rotate angle
+            const newAngle = (comp.angle + angleDelta + 360) % 360;
+
+            this.store.dispatch(actions.updateComponent(id, {
+                position: newPos,
+                angle: newAngle
+            }));
+        });
+    }
+
+    /**
+     * Calculate geometry for 2 folds (U-shaped path)
+     */
+    calculateTwoFoldGeometry(source, target, pathLength) {
+        // For 2 folds: U-shaped path with two 90° turns
+        // Beam goes out, turns 90°, travels across, turns 90° back toward source
+        // Lenses end up parallel facing OPPOSITE directions (180° apart)
+
+        const dx = target.position.x - source.position.x;
+        const dy = target.position.y - source.position.y;
+
+        // Determine if we're primarily horizontal or vertical
+        const isHorizontalMajor = Math.abs(dx) > Math.abs(dy);
+
+        // Divide into 3 equal segments
+        const segmentLength = pathLength / 3;
+
+        let sourceAngle, mirror1Pos, mirror2Pos, targetPos, mirror1Angle, mirror2Angle, targetAngle;
+
+        if (isHorizontalMajor) {
+            // Horizontal U-shape: go right, up, back left (or mirrored)
+            sourceAngle = dx > 0 ? 0 : 180;
+
+            // First mirror at end of first horizontal segment
+            mirror1Pos = {
+                x: source.position.x + (dx > 0 ? segmentLength : -segmentLength),
+                y: source.position.y
+            };
+
+            // Second mirror at end of vertical segment
+            const verticalDir = dy > 0 ? 1 : -1;
+            mirror2Pos = {
+                x: mirror1Pos.x,
+                y: mirror1Pos.y + verticalDir * segmentLength
+            };
+
+            // Target at end of final horizontal segment (back toward source)
+            targetPos = {
+                x: mirror2Pos.x + (dx > 0 ? -segmentLength : segmentLength),
+                y: mirror2Pos.y
+            };
+
+            // Mirror angles for 90° reflections
+            mirror1Angle = dx > 0 ? (dy > 0 ? 45 : 315) : (dy > 0 ? 135 : 225);
+            mirror2Angle = dx > 0 ? (dy > 0 ? 135 : 225) : (dy > 0 ? 45 : 315);
+
+            // Target lens faces OPPOSITE to source (180° different)
+            targetAngle = (sourceAngle + 180) % 360;
+
+        } else {
+            // Vertical U-shape: go up, right, back down (or mirrored)
+            sourceAngle = dy > 0 ? 90 : 270;
+
+            // First mirror at end of first vertical segment
+            mirror1Pos = {
+                x: source.position.x,
+                y: source.position.y + (dy > 0 ? segmentLength : -segmentLength)
+            };
+
+            // Second mirror at end of horizontal segment
+            const horizontalDir = dx > 0 ? 1 : -1;
+            mirror2Pos = {
+                x: mirror1Pos.x + horizontalDir * segmentLength,
+                y: mirror1Pos.y
+            };
+
+            // Target at end of final vertical segment (back toward source)
+            targetPos = {
+                x: mirror2Pos.x,
+                y: mirror2Pos.y + (dy > 0 ? -segmentLength : segmentLength)
+            };
+
+            // Mirror angles for 90° reflections
+            mirror1Angle = dy > 0 ? (dx > 0 ? 45 : 135) : (dx > 0 ? 315 : 225);
+            mirror2Angle = dy > 0 ? (dx > 0 ? 315 : 225) : (dx > 0 ? 45 : 135);
+
+            // Target lens faces OPPOSITE to source (180° different)
+            targetAngle = (sourceAngle + 180) % 360;
+        }
+
+        return {
+            mirror1Position: mirror1Pos,
+            mirror1Angle: mirror1Angle,
+            mirror2Position: mirror2Pos,
+            mirror2Angle: mirror2Angle,
+            sourceAngle: sourceAngle,
+            targetAngle: targetAngle,
+            targetPosition: targetPos
+        };
+    }
+
+    /**
+     * Calculate path length between selected components (for UI display)
+     */
+    getPathLengthBetween(sourceId, targetId) {
+        const state = this.store.getState();
+        return state.beamPath.calculatePathLengthBetween(sourceId, targetId);
+    }
+
+    /**
      * Zoom by factor
      */
     zoom(factor) {
         const state = this.store.getState();
-        const newZoom = Math.max(0.1, Math.min(5, state.ui.viewport.zoom * factor));
+        const newZoom = Math.max(0.1, Math.min(10, state.ui.viewport.zoom * factor));
         this.store.dispatch(actions.setViewport({ zoom: newZoom }));
 
         // Update zoom display
@@ -3602,14 +4588,20 @@ class BeamPathOptimizerApp {
                              (selectionType === 'zone' && selectedZoneId) ||
                              (selectionType === 'segment' && selectedSegmentIds.length > 0);
 
+        const optimizerToggleContainer = document.getElementById('optimizer-toggle-container');
+
         if (hasSelection) {
-            // Show properties section, hide optimizer
+            // Show properties section, hide optimizer toggle button
             selectionSection.classList.remove('hidden');
-            optimizerSection.classList.add('hidden');
+            if (optimizerToggleContainer) {
+                optimizerToggleContainer.classList.add('hidden');
+            }
         } else {
-            // Show optimizer section, hide properties
+            // Hide properties section, show optimizer toggle button (only if optimizer section is hidden)
             selectionSection.classList.add('hidden');
-            optimizerSection.classList.remove('hidden');
+            if (optimizerToggleContainer && optimizerSection.classList.contains('hidden')) {
+                optimizerToggleContainer.classList.remove('hidden');
+            }
         }
 
         if (selectionType === 'component' && selectedId && state.components.has(selectedId)) {
@@ -3673,6 +4665,15 @@ class BeamPathOptimizerApp {
             }
 
             // === Beam Physics Controls ===
+
+            // Emit light toggle (only for sources)
+            const emitLightGroup = document.getElementById('emit-light-group');
+            if (component.type === ComponentType.SOURCE) {
+                emitLightGroup.style.display = 'block';
+                document.getElementById('prop-emit-light').checked = component.emitLight !== false;
+            } else {
+                emitLightGroup.style.display = 'none';
+            }
 
             // Shallow angle mode (only for beam splitters)
             const shallowAngleGroup = document.getElementById('shallow-angle-group');
@@ -3780,6 +4781,176 @@ class BeamPathOptimizerApp {
                     emptyMsg.className = 'alignment-constraints-empty';
                     emptyMsg.textContent = 'No alignment constraints';
                     alignmentConstraintsList.appendChild(emptyMsg);
+                }
+            }
+
+            // Display path length constraints
+            const pathLengthConstraintsList = document.getElementById('path-length-constraints-list');
+            if (pathLengthConstraintsList) {
+                pathLengthConstraintsList.innerHTML = '';
+
+                if (component.pathLengthConstraints && component.pathLengthConstraints.length > 0) {
+                    component.pathLengthConstraints.forEach(constraint => {
+                        const targetComp = state.components.get(constraint.targetComponentId);
+                        if (!targetComp) return; // Component might have been deleted
+
+                        // Calculate current path length
+                        const currentLength = state.beamPath.calculatePathLengthBetween(
+                            component.id,
+                            constraint.targetComponentId
+                        );
+
+                        // Determine status
+                        let status = 'inactive';
+                        let statusIcon = '⊗';
+                        if (currentLength !== null) {
+                            const deviation = Math.abs(currentLength - constraint.targetPathLength);
+                            const tolerance = constraint.tolerance || 1.0;
+                            if (deviation <= tolerance) {
+                                status = 'satisfied';
+                                statusIcon = '✓';
+                            } else {
+                                status = 'violated';
+                                statusIcon = '⚠';
+                            }
+                        }
+
+                        const item = document.createElement('div');
+                        item.className = `path-constraint-item ${status}`;
+
+                        // Header
+                        const header = document.createElement('div');
+                        header.className = 'path-constraint-header';
+
+                        const icon = document.createElement('span');
+                        icon.className = 'path-constraint-icon';
+                        icon.textContent = '↔';
+
+                        const target = document.createElement('span');
+                        target.className = 'path-constraint-target';
+                        target.textContent = targetComp.name;
+
+                        const removeBtn = document.createElement('button');
+                        removeBtn.className = 'path-constraint-remove';
+                        removeBtn.textContent = '×';
+                        removeBtn.title = 'Remove constraint';
+                        removeBtn.addEventListener('click', () => {
+                            this.removePathLengthConstraint(component.id, constraint.targetComponentId);
+                        });
+
+                        header.appendChild(icon);
+                        header.appendChild(target);
+                        header.appendChild(removeBtn);
+
+                        // Details
+                        const details = document.createElement('div');
+                        details.className = 'path-constraint-details';
+
+                        // Target length row
+                        const targetRow = document.createElement('div');
+                        targetRow.className = 'path-constraint-row';
+
+                        const targetLabel = document.createElement('span');
+                        targetLabel.className = 'path-constraint-label';
+                        targetLabel.textContent = 'Target:';
+
+                        const targetValue = document.createElement('span');
+                        targetValue.className = 'path-constraint-value';
+                        targetValue.textContent = `${constraint.targetPathLength.toFixed(1)} mm`;
+
+                        targetRow.appendChild(targetLabel);
+                        targetRow.appendChild(targetValue);
+
+                        // Current length row
+                        const currentRow = document.createElement('div');
+                        currentRow.className = 'path-constraint-row';
+
+                        const currentLabel = document.createElement('span');
+                        currentLabel.className = 'path-constraint-label';
+                        currentLabel.textContent = 'Current:';
+
+                        const currentValue = document.createElement('span');
+                        currentValue.className = `path-constraint-current ${status}`;
+                        if (currentLength !== null) {
+                            currentValue.textContent = `${currentLength.toFixed(1)} mm`;
+                        } else {
+                            currentValue.textContent = 'No path';
+                        }
+
+                        const statusIconSpan = document.createElement('span');
+                        statusIconSpan.className = 'path-constraint-status-icon';
+                        statusIconSpan.textContent = statusIcon;
+
+                        currentValue.appendChild(statusIconSpan);
+                        currentRow.appendChild(currentLabel);
+                        currentRow.appendChild(currentValue);
+
+                        details.appendChild(targetRow);
+                        details.appendChild(currentRow);
+
+                        // Fold count controls (NEW UI)
+                        if (constraint.mode === 'foldable') {
+                            const foldCountRow = document.createElement('div');
+                            foldCountRow.className = 'path-constraint-row';
+                            foldCountRow.style.marginTop = '8px';
+
+                            const foldCountLabel = document.createElement('div');
+                            foldCountLabel.textContent = 'Folds:';
+                            foldCountLabel.style.fontSize = '11px';
+                            foldCountLabel.style.marginBottom = '4px';
+                            foldCountLabel.style.color = '#999';
+
+                            const foldButtonGroup = document.createElement('div');
+                            foldButtonGroup.style.display = 'flex';
+                            foldButtonGroup.style.gap = '4px';
+
+                            const currentFoldCount = constraint.foldCount || 0;
+
+                            // Create buttons for 0, 1, 2 folds
+                            [0, 1, 2].forEach(count => {
+                                const btn = document.createElement('button');
+                                btn.textContent = count.toString();
+                                btn.className = 'fold-count-btn' + (currentFoldCount === count ? ' active' : '');
+                                btn.style.flex = '1';
+                                btn.style.padding = '4px 8px';
+                                btn.style.fontSize = '12px';
+                                btn.style.border = currentFoldCount === count ? '2px solid #4CAF50' : '1px solid #444';
+                                btn.style.background = currentFoldCount === count ? '#4CAF5022' : '#222';
+                                btn.style.color = currentFoldCount === count ? '#4CAF50' : '#999';
+                                btn.style.borderRadius = '4px';
+                                btn.style.cursor = 'pointer';
+                                btn.title = `${count} fold${count !== 1 ? 's' : ''}`;
+
+                                btn.addEventListener('click', () => {
+                                    this.changeFoldCount(component.id, constraint.targetComponentId, count);
+                                });
+
+                                foldButtonGroup.appendChild(btn);
+                            });
+
+                            foldCountRow.appendChild(foldCountLabel);
+                            foldCountRow.appendChild(foldButtonGroup);
+                            details.appendChild(foldCountRow);
+
+                            // Show mirror count if folds > 0
+                            if (currentFoldCount > 0) {
+                                const mirrorCountRow = document.createElement('div');
+                                mirrorCountRow.className = 'path-constraint-row';
+                                mirrorCountRow.style.fontSize = '11px';
+                                mirrorCountRow.style.color = '#666';
+                                mirrorCountRow.style.marginTop = '4px';
+
+                                const mirrorCount = (constraint.mirrorIds || []).length;
+                                mirrorCountRow.textContent = `${mirrorCount} mirror${mirrorCount !== 1 ? 's' : ''}`;
+
+                                details.appendChild(mirrorCountRow);
+                            }
+                        }
+
+                        item.appendChild(header);
+                        item.appendChild(details);
+                        pathLengthConstraintsList.appendChild(item);
+                    });
                 }
             }
         } else if (selectionType === 'zone' && selectedZoneId) {
@@ -4112,7 +5283,7 @@ class BeamPathOptimizerApp {
 
         // Find all source components and start propagation from them
         for (const [id, component] of state.components) {
-            if (component.type === ComponentType.SOURCE) {
+            if (component.type === ComponentType.SOURCE && component.emitLight !== false) {
                 this.propagateBeamFrom(component.id, null, processed);
             }
         }
@@ -4129,9 +5300,22 @@ class BeamPathOptimizerApp {
         let component = this.store.getState().components.get(componentId);
         if (!component) return;
 
-        const outputPorts = component.type === ComponentType.BEAM_SPLITTER
-            ? ['reflected', 'transmitted']
-            : component.canOutputBeam() ? ['output'] : [];
+        // Determine output ports based on component type and reflectance
+        let outputPorts = [];
+        if (component.type === ComponentType.BEAM_SPLITTER) {
+            // Only create beams based on reflectance/transmittance values
+            const reflectance = component.reflectance ?? 0.5;
+            const transmittance = component.transmittance ?? (1 - reflectance);
+
+            if (reflectance > 0) {
+                outputPorts.push('reflected');
+            }
+            if (transmittance > 0) {
+                outputPorts.push('transmitted');
+            }
+        } else if (component.canOutputBeam()) {
+            outputPorts = ['output'];
+        }
 
         for (const sourcePort of outputPorts) {
             // Get fresh state for each port iteration

@@ -49,6 +49,11 @@ export const VALID_ANGLES_BY_TYPE = {
 export const ANGLE_TOLERANCE = 5;
 
 /**
+ * Path length tolerance for path length constraints (mm)
+ */
+export const PATH_LENGTH_TOLERANCE = 1.0;
+
+/**
  * Normalize an angle to 0-360 range
  */
 export function normalizeAngle(angle) {

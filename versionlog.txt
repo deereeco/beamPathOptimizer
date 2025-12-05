@@ -1,6 +1,66 @@
 BEAM PATH OPTIMIZER - VERSION LOG
 ================================================================================
 
+Version 1.6 (2025-12-04)
+--------------------------------------------------------------------------------
+New Features:
+
+  • Source Light Emission Control
+    - New "Light Emission" property for source components
+    - Checkbox: "Emit light when lasers on"
+    - Allows disabling individual sources without removing them
+    - Sources with emission disabled show red "X" overlay
+    - Property saved/loaded with project files
+    - Auto-propagates beams when toggled (if auto-propagate enabled)
+
+Bug Fixes:
+
+  • Fixed File Name Not Populating on Load
+    - File name input now properly displays loaded document's name
+    - Issue: Name typed in input wasn't synced to application state
+    - Solution: Added bidirectional state synchronization with input field
+    - File name in text box now matches what's saved in JSON
+    - New UPDATE_DOCUMENT_NAME action added to state management
+
+  • Fixed Beam Splitter Reflectance Property
+    - Reflectance slider now actually affects beam behavior
+    - Previously: Both reflected and transmitted beams always created (50/50)
+    - Fixed: Only creates beams based on reflectance/transmittance values
+    - 100% reflectance → only reflected beam shows
+    - 0% reflectance (100% transmission) → only transmitted beam shows
+    - 50/50 → both beams show (default)
+    - Auto-propagates when reflectance changed (if auto-propagate enabled)
+
+UI/UX Improvements:
+
+  • Simplified Background Settings
+    - Removed "Clear Image" button (redundant with color/image radio selection)
+    - Removed "Reset to Default" button (unnecessary complexity)
+    - Cleaner, more streamlined settings modal
+    - Only essential controls remain: type selector, color picker, image chooser, opacity slider
+
+Technical Changes:
+
+  • Version bumped to 1.6
+  • Component.emitLight property added (default: true for sources)
+  • Component.update() whitelist includes emitLight
+  • Component.toJSON() serializes emitLight
+  • propagateBeamFrom() respects emitLight and reflectance/transmittance values
+  • createBeamConnection() respects reflectance/transmittance for port selection
+  • State management includes UPDATE_DOCUMENT_NAME action and reducer
+  • File name input event listener syncs to state on input
+
+Files Modified:
+  • js/state.js - Version to 1.6, UPDATE_DOCUMENT_NAME action/reducer
+  • js/models/Component.js - emitLight property, defaults, update whitelist, toJSON serialization
+  • js/main.js - File name sync, emitLight controls, reflectance beam logic, auto-propagate on changes
+  • js/render/Renderer.js - Red "X" overlay for disabled sources
+  • index.html - Light emission checkbox, removed background buttons
+  • css/styles.css - Simplified background controls layout
+  • versionlog.txt - Added V1.6 changelog
+  • claude.md - Updated documentation
+  • README.md - Updated version and features
+
 Version 1.5 (2025-12-04)
 --------------------------------------------------------------------------------
 New Features:

@@ -324,6 +324,61 @@ export class BeamPath {
     }
 
     /**
+     * Calculate the total optical path length between two components
+     * Traces beam path from source to target and sums segment lengths
+     * @param {string} sourceId - Source component ID
+     * @param {string} targetId - Target component ID
+     * @returns {number|null} - Total path length in mm, or null if no path exists
+     */
+    calculatePathLengthBetween(sourceId, targetId) {
+        if (!sourceId || !targetId) return null;
+        if (sourceId === targetId) return 0;
+
+        // Find all paths from source
+        const allPaths = this.traceFromSource(sourceId);
+
+        // Filter paths that end at targetId
+        const validPaths = allPaths.filter(pathSegmentIds => {
+            if (pathSegmentIds.length === 0) return false;
+
+            const lastSegmentId = pathSegmentIds[pathSegmentIds.length - 1];
+            const lastSegment = this.segments.get(lastSegmentId);
+
+            return lastSegment && lastSegment.targetId === targetId;
+        });
+
+        if (validPaths.length === 0) {
+            // No path exists between these components
+            return null;
+        }
+
+        // Use the first valid path (primary path)
+        // For beam splitters, this will be the transmitted path
+        const primaryPath = validPaths[0];
+
+        // Sum the path lengths of all segments in the path
+        let totalLength = 0;
+        for (const segmentId of primaryPath) {
+            const segment = this.segments.get(segmentId);
+            if (segment && segment.pathLength !== undefined) {
+                totalLength += segment.pathLength;
+            }
+        }
+
+        return totalLength;
+    }
+
+    /**
+     * Check if a beam path exists between two components
+     * @param {string} sourceId - Source component ID
+     * @param {string} targetId - Target component ID
+     * @returns {boolean} - True if path exists
+     */
+    pathExistsBetween(sourceId, targetId) {
+        return this.calculatePathLengthBetween(sourceId, targetId) !== null;
+    }
+
+    /**
      * Assign branch indices and colors based on splits
      */
     assignBranchColors(sourceIds) {
