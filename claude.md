@@ -2,7 +2,7 @@
 
 ## Overview
 
-A 2D GUI application for optimizing laser beam path component placement on an optical table. Built with vanilla JavaScript/HTML5 Canvas for easy distribution (runs directly in browser, no build step required).
+A 2D GUI application for designing and visualizing laser beam paths on an optical table. Built with vanilla JavaScript/HTML5 Canvas for easy distribution (runs directly in browser, no build step required).
 
 **To run:** Serve the directory with any HTTP server (e.g., `python -m http.server 8000`) and open `index.html` in a browser. ES Modules require HTTP serving - file:// URLs won't work.
 
@@ -45,7 +45,6 @@ A 2D GUI application for optimizing laser beam path component placement on an op
 - Calculated from component positions weighted by mass
 - Displayed as crosshair on canvas
 - Status bar shows if CoM is inside mounting zone
-- Optimizer targets getting CoM into mounting zone
 
 ### Alignment Constraints
 - **Create constraints**: Select 2+ components and press V (vertical) or H (horizontal)
@@ -59,24 +58,6 @@ A 2D GUI application for optimizing laser beam path component placement on an op
   - **Vertical (↕)**: Components maintain the same X coordinate
   - **Horizontal (↔)**: Components maintain the same Y coordinate
 - Constraints automatically cleaned up when components are deleted
-
-### Optimization
-- **Algorithm**: Simulated Annealing
-- **Adaptive parameters**: Scales based on number of movable components
-- **Early stopping**: Converges when no improvement found
-- **Cost function** (weighted sum):
-  - CoM distance to mounting zone (default 50%)
-  - Footprint/bounding box area (default 25%)
-  - Total beam path length (default 25%)
-  - Penalties for constraint violations (high multiplier)
-- **UI feedback**:
-  - Progress bar
-  - Status text (what's happening)
-  - Improvement percentage
-  - Iteration count
-  - CoM distance
-  - Violation count
-- **Workflow**: Start → Pause/Resume → Accept or Revert results
 
 ### File I/O
 - Save to JSON (downloads file)
@@ -104,14 +85,11 @@ A 2D GUI application for optimizing laser beam path component placement on an op
 │   ├── models/
 │   │   ├── Component.js    # Component class, types, factory method
 │   │   └── BeamPath.js     # BeamSegment and BeamPath graph structure
-│   ├── render/
-│   │   ├── Renderer.js     # Main render orchestrator
-│   │   ├── ComponentRenderer.js  # Component drawing
-│   │   ├── BeamRenderer.js       # Beam path drawing
-│   │   └── ConstraintRenderer.js # Zone and CoM drawing
-│   └── optimization/
-│       ├── Optimizer.js    # Simulated annealing implementation
-│       └── CostFunction.js # Cost calculations
+│   └── render/
+│       ├── Renderer.js     # Main render orchestrator
+│       ├── ComponentRenderer.js  # Component drawing
+│       ├── BeamRenderer.js       # Beam path drawing
+│       └── ConstraintRenderer.js # Zone and CoM drawing
 ```
 
 ---
@@ -130,7 +108,7 @@ A 2D GUI application for optimizing laser beam path component placement on an op
   mass: 120,                // grams
   reflectance: 1.0,         // 0-1 (beam splitters < 1)
   transmittance: 0.0,       // 1 - reflectance
-  isFixed: false,           // locked from optimizer
+  isFixed: false,           // manual control flag
   mountZone: {              // component's physical mount keep-out
     enabled: false,
     paddingX: 15,           // mm padding in X direction
@@ -193,47 +171,6 @@ A 2D GUI application for optimizing laser beam path component placement on an op
 
 ---
 
-## Optimization Algorithm Details
-
-### Simulated Annealing Parameters
-```javascript
-{
-  initialTemp: 100,
-  finalTemp: 0.1,
-  coolingRate: 0.98-0.99,      // Adaptive based on component count
-  iterationsPerTemp: 10-25,    // Adaptive
-  maxIterations: 500-5000,     // Adaptive (movableCount * 300, capped)
-  initialStepSize: 50,         // mm - how far to move components
-  minStepSize: 1,              // mm
-  earlyStopIterations: 200-500 // Stop if no improvement
-}
-```
-
-### Runtime Behavior
-- **200 iterations per animation frame** for responsive UI
-- **Live preview every 400 iterations** to reduce render overhead
-- **Error-tolerant**: Callbacks wrapped in try/catch to prevent freezing
-- **Early stopping**: Converges when no improvement found for N iterations
-- Typical 6-component optimization completes in a few seconds
-
-### Cost Function
-```
-Total = w_com * C_com + w_footprint * C_footprint + w_path * C_pathLength + Penalties
-
-C_com = squared distance from CoM to mounting zone center (0 if inside)
-C_footprint = bounding box area of all components
-C_pathLength = sum of all beam segment lengths
-Penalties = 1000 * overlap_area for each constraint violation
-```
-
-### Acceptance Probability
-```
-if (newCost < currentCost) accept
-else accept with probability exp(-(newCost - currentCost) / temperature)
-```
-
----
-
 ## Save File Format (JSON)
 
 ```javascript
@@ -281,7 +218,6 @@ Key variables in `:root` (css/styles.css):
 - **State management**: Redux-like pattern with single state tree and reducer
 - **Rendering**: Immediate mode canvas rendering, re-renders on state change
 - **Component detection**: Uses `containsPoint()` method for hit testing
-- **Optimizer runs async**: Uses `requestAnimationFrame` for non-blocking updates
 
 ---
 
@@ -701,7 +637,48 @@ Users can still use **Alignment Constraints** (V key for vertical, H key for hor
 
 ---
 
+## Phase 10: Optimizer System - REMOVED (V1.8)
+
+**Status**: This feature has been removed in V1.8 due to reliability issues.
+
+### What Was Removed
+The entire optimization system including simulated annealing algorithm, cost functions, and results visualization has been completely removed:
+- Simulated annealing optimizer (`Optimizer.js`)
+- Cost function calculations (`CostFunction.js`)
+- Results view with graph visualization (`ResultsGraph.js`)
+- Optimizer UI controls (weight sliders, start/pause/stop buttons)
+- Progress tracking and statistics display
+- Snapshot storage and preview functionality
+
+### Files Affected
+- **Deleted**: `js/optimization/` directory (Optimizer.js, CostFunction.js - 1,680 lines total)
+- **Modified**: `js/main.js` (removed ~520 lines), `index.html` (removed ~95 lines), `css/styles.css` (removed ~200 lines)
+- **Total**: Over 2,100 lines of code removed
+
+### Reason for Removal
+The optimization system was not working reliably and could cause unexpected behavior or break the application. The feature will be re-implemented in a future version with a more careful design.
+
+### What Remains
+- **Fixed Position** and **Fixed Angle** checkboxes still exist for manual control
+- **Alignment Constraints** (V/H/U keys) for creating persistent component relationships
+- All other features remain fully functional
+
+---
+
 ## Version History
+
+### Version 1.8 (2025-12-05)
+**Code Cleanup:**
+- Removed entire optimizer system (Optimizer.js, CostFunction.js, and all related UI/code)
+- Removed optimizer section, results view, and related controls from interface
+- Cleaned up ~1,700 lines of optimizer code and ~200 lines of CSS
+- Fixed Position and Fixed Angle checkboxes remain but no longer reference optimizer
+
+**Reason for Removal:**
+The optimization system was not working reliably and could cause unexpected behavior. The feature will be re-implemented in a future version with a more careful design.
+
+**Alternative:**
+Users can still use **Alignment Constraints** (V key for vertical, H key for horizontal) to create persistent relationships between components that move together, and manually arrange components as needed.
 
 ### Version 1.6 (2025-12-04)
 **New Features:**

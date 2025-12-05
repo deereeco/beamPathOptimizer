@@ -1,8 +1,8 @@
 # Beam Path Optimizer
 
-A web-based tool for designing and optimizing optical beam paths on a breadboard. Place optical components, connect them with laser beams, and use simulated annealing optimization to find optimal component placements.
+A web-based tool for designing and visualizing optical beam paths on a breadboard. Place optical components, connect them with laser beams, and use alignment constraints to organize your layout.
 
-**Current Version: 1.7**
+**Current Version: 1.8**
 
 ## Features
 
@@ -74,27 +74,6 @@ Create persistent alignment relationships between components:
 - **Auto-cleanup** - Constraints automatically removed when components are deleted
 - **Saved with Projects** - Alignment constraints persist across save/load
 
-### Optimization
-Simulated annealing optimizer minimizes a weighted cost function:
-- **Center of Mass** - Keep system CoM within mounting zone
-- **Footprint** - Minimize total system footprint
-- **Path Length** - Minimize total beam path length
-
-The optimizer respects all constraints:
-- Fixed components stay in place
-- Grid snapping is applied per-component
-- **Relative beam angles are preserved** - When components move or rotate, their input/output beam angles relative to their own orientation are maintained
-
-### Results View
-After optimization completes, click "View Results" to explore the optimization history:
-- **Cost vs Iteration Graph** - Visual timeline of the optimization process
-- **Hover** - See iteration number and cost for any point
-- **Click** - Select an iteration to inspect
-- **Double-click** - Preview that iteration's layout on the canvas
-- **Apply This Layout** - Apply any iteration, not just the best
-- **Split-screen comparison** - Toggle to see original vs selected side-by-side
-- **Press Escape** - Exit preview mode and return to current layout
-
 ### Zones
 - **Mounting Zone** - Target area for center of mass (green)
 - **Keep-out Zones** - Areas where components cannot be placed (red)
@@ -139,24 +118,19 @@ After optimization completes, click "View Results" to explore the optimization h
 4. Remove wavelengths by clicking the × button
 5. Delete segments with the "Delete Segment" button
 
-### Running the Optimizer
-1. Place your components and create beam connections
-2. Set any components as "Fixed" that shouldn't move
-3. Adjust optimization weights (CoM, Footprint, Path Length)
-4. Click "Start" to begin optimization
-5. When complete, choose:
-   - **Accept** - Apply the best result found
-   - **Revert** - Undo all changes
-   - **View Results** - Explore the optimization history
+### Using Alignment Constraints
+1. Select 2 or more components
+2. Press V to align them vertically (same X coordinate)
+3. Or press H to align them horizontally (same Y coordinate)
+4. Move any component in the group - all others move together
+5. Press U to remove all constraints from selected component(s)
+6. Or click × next to individual constraints in the Properties panel
 
-### Using Results View
-1. After optimization, click "View Results"
-2. The graph shows cost vs iteration - lower is better
-3. Hover over points to see details
-4. Click to select, double-click to preview on canvas
-5. Use split-screen checkbox to compare original vs selected
-6. Click "Apply This Layout" to apply any iteration you like
-7. Press Escape or "Close Results View" to exit
+### Manual Component Control
+Components can be locked to prevent accidental changes:
+- **Fixed Position** - Check to prevent component from being moved
+- **Fixed Angle** - Check to prevent component angle from being changed
+- Useful for setting up reference components or established parts of your layout
 
 ### Keyboard Shortcuts
 - `V` - Align 2+ components vertically (or select tool if <2 selected)
@@ -172,7 +146,7 @@ After optimization completes, click "View Results" to explore the optimization h
 - `Ctrl+Y` / `Ctrl+Shift+Z` - Redo
 - `Ctrl+S` - Save project
 - `+` / `-` - Zoom in/out
-- `Escape` - Cancel operation / Clear selection / Exit preview mode
+- `Escape` - Cancel operation / Clear selection
 
 ## File Structure
 
@@ -191,12 +165,11 @@ beamPathOptimizer/
     │   └── BeamPath.js     # Beam path graph structure
     ├── physics/
     │   └── BeamPhysics.js  # Beam physics calculations
-    ├── optimization/
-    │   ├── Optimizer.js    # Simulated annealing optimizer (with constrained moves)
-    │   └── CostFunction.js # Cost function calculations
     └── render/
-        ├── Renderer.js     # Canvas rendering (includes preview modes)
-        └── ResultsGraph.js # Optimization results graph visualization
+        ├── Renderer.js     # Canvas rendering
+        ├── ComponentRenderer.js  # Component drawing
+        ├── BeamRenderer.js       # Beam path drawing
+        └── ConstraintRenderer.js # Zone and CoM drawing
 ```
 
 ## Technical Details

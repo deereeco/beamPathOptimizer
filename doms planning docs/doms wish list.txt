@@ -2,5 +2,9 @@
 component and drag it, there are still a ton on constraints left. why is this? 
 
 
-[w] - the 'path length constraints' are not working well and they can break things it seems. should we remove them to clean things up? i will
+[X] - the 'path length constraints' are not working well and they can break things it seems. should we remove them to clean things up? i will
+probably want to redo them in the future in a more careful way.
+
+
+[w] - the optimization part of this is not working well and they can break things it seems. should we remove just the optimizer parts of this to clean things up? i will
 probably want to redo them in the future in a more careful way.

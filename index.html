@@ -319,12 +319,10 @@
                         <div class="property-group">
                             <label class="property-label">Fixed Position</label>
                             <input type="checkbox" id="prop-fixed">
-                            <span class="checkbox-hint">Locked from optimizer</span>
                         </div>
                         <div class="property-group">
                             <label class="property-label">Fixed Angle</label>
                             <input type="checkbox" id="prop-angle-fixed">
-                            <span class="checkbox-hint">Angle locked from optimizer</span>
                         </div>
                         <div class="property-group mount-zone-group">
                             <label class="property-label">Mount Zone</label>
@@ -473,103 +471,6 @@
                         </div>
                     </div>
                 </section>
-
-                <section class="panel-section hidden" id="optimizer-section">
-                    <div class="section-header">
-                        <h3>Optimizer</h3>
-                        <button id="btn-hide-optimizer" class="action-btn small">Hide</button>
-                    </div>
-                    <div class="optimizer-controls">
-                        <div class="weight-slider">
-                            <label>Center of Mass</label>
-                            <input type="range" id="weight-com" min="0" max="100" value="50">
-                            <span class="weight-value">50%</span>
-                        </div>
-                        <div class="weight-slider">
-                            <label>Footprint</label>
-                            <input type="range" id="weight-footprint" min="0" max="100" value="25">
-                            <span class="weight-value">25%</span>
-                        </div>
-                        <div class="weight-slider">
-                            <label>Path Length</label>
-                            <input type="range" id="weight-path" min="0" max="100" value="25">
-                            <span class="weight-value">25%</span>
-                        </div>
-                        <div class="optimizer-buttons" id="opt-buttons-start">
-                            <button id="btn-optimize" class="action-btn primary">Start Optimization</button>
-                        </div>
-                        <div class="optimizer-buttons hidden" id="opt-buttons-running">
-                            <button id="btn-pause-optimize" class="action-btn">Pause</button>
-                            <button id="btn-stop-optimize" class="action-btn danger">Stop</button>
-                        </div>
-                        <div class="optimizer-buttons hidden" id="opt-buttons-paused">
-                            <button id="btn-resume-optimize" class="action-btn primary">Resume</button>
-                            <button id="btn-stop-optimize-2" class="action-btn danger">Stop</button>
-                        </div>
-                        <div class="optimizer-buttons hidden" id="opt-buttons-finished">
-                            <button id="btn-accept-optimize" class="action-btn primary">Accept</button>
-                            <button id="btn-revert-optimize" class="action-btn danger">Revert</button>
-                            <button id="btn-view-results" class="action-btn">View Results</button>
-                        </div>
-                        <div id="optimizer-progress" class="hidden">
-                            <progress id="opt-progress-bar" max="100" value="0"></progress>
-                            <div id="opt-status-text" class="opt-status-text">Starting optimization...</div>
-                            <div class="opt-stats-grid">
-                                <div class="opt-stat">
-                                    <span class="opt-stat-label">Improvement</span>
-                                    <span class="opt-stat-value" id="opt-improvement">0%</span>
-                                </div>
-                                <div class="opt-stat">
-                                    <span class="opt-stat-label">Iterations</span>
-                                    <span class="opt-stat-value" id="opt-iteration">0</span>
-                                </div>
-                                <div class="opt-stat">
-                                    <span class="opt-stat-label">CoM Distance</span>
-                                    <span class="opt-stat-value" id="opt-com-cost">-</span>
-                                </div>
-                                <div class="opt-stat">
-                                    <span class="opt-stat-label">Violations</span>
-                                    <span class="opt-stat-value" id="opt-penalty">0</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Results View Section -->
-                <section class="panel-section hidden" id="results-section">
-                    <h3>Optimization Results</h3>
-                    <div class="results-view-container">
-                        <canvas id="results-graph" width="280" height="180"></canvas>
-                        <div class="results-info">
-                            <div class="results-tooltip" id="results-tooltip">
-                                Hover over graph to see iteration details
-                            </div>
-                            <div class="results-selected" id="results-selected">
-                                <span class="results-selected-label">Selected:</span>
-                                <span class="results-selected-value" id="selected-iteration-info">None</span>
-                            </div>
-                        </div>
-                        <div class="results-actions">
-                            <button id="btn-preview-selected" class="action-btn" disabled>Preview Selected</button>
-                            <button id="btn-apply-selected" class="action-btn primary" disabled>Apply This Layout</button>
-                        </div>
-                        <div class="results-options">
-                            <label class="results-checkbox">
-                                <input type="checkbox" id="results-split-screen">
-                                <span>Split-screen comparison</span>
-                            </label>
-                        </div>
-                        <div class="results-close">
-                            <button id="btn-close-results" class="action-btn">Close Results View</button>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Optimizer Toggle Button (bottom of panel) -->
-                <div id="optimizer-toggle-container">
-                    <button id="btn-show-optimizer" class="action-btn primary optimizer-toggle-btn">Optimize</button>
-                </div>
             </aside>
         </main>
 

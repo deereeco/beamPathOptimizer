@@ -1,6 +1,99 @@
 BEAM PATH OPTIMIZER - VERSION LOG
 ================================================================================
 
+Version 1.8 (2025-12-05)
+--------------------------------------------------------------------------------
+Breaking Changes:
+
+  • Optimizer System - REMOVED
+    - Removed entire optimization system due to reliability issues
+    - Includes simulated annealing algorithm (Optimizer.js)
+    - Includes cost function calculations (CostFunction.js)
+    - Includes results view with graph visualization (ResultsGraph.js)
+    - Feature was not working reliably and could break the application
+    - Will be re-implemented in a future version with more careful design
+
+    What was removed:
+    - Optimizer UI controls (weight sliders, start/pause/stop buttons)
+    - Progress tracking and statistics display
+    - Snapshot storage and preview functionality
+    - Cost vs iteration graph with interactive selection
+    - Split-screen comparison mode
+    - Results view panel
+    - "Optimize" button and optimizer toggle interface
+    - All optimizer-related CSS styling (~200 lines)
+
+    What remains:
+    - Fixed Position and Fixed Angle checkboxes (no longer reference optimizer)
+    - Alignment Constraints (V/H/U keys) fully functional
+    - All other features remain unchanged
+
+    Alternative:
+    - Users can manually arrange components as needed
+    - Use Alignment Constraints (V/H keys) for persistent component relationships
+    - Fixed Position/Angle checkboxes provide manual control
+
+Files Modified:
+
+  • js/main.js
+    - Removed optimizer import
+    - Removed optimizer instance variable
+    - Removed results view state variables
+    - Removed setupOptimizerControls() method (~100 lines)
+    - Removed all optimizer control methods (~520 lines total):
+      * startOptimization, pauseOptimization, resumeOptimization
+      * stopOptimization, acceptOptimization, revertOptimization
+      * updateOptimizerProgress, onOptimizationComplete
+      * showOptimizerSection, hideOptimizerSection
+      * getOptimizationWeights, showOptimizerButtons
+      * openResultsView, closeResultsView
+      * previewSelectedSnapshot, applySelectedSnapshot
+      * setupResultsViewControls
+    - Cleaned up ~520 lines of optimizer code
+
+  • index.html
+    - Removed optimizer section (~60 lines)
+    - Removed results view section (~30 lines)
+    - Removed optimizer toggle button
+    - Removed checkbox hints referencing optimizer
+    - Cleaned up ~95 lines of UI code
+
+  • css/styles.css
+    - Removed optimizer controls styling
+    - Removed results view styling
+    - Removed split-screen comparison styles
+    - Removed preview mode indicator styles
+    - Removed optimizer toggle button styles
+    - Cleaned up ~200 lines of CSS
+
+  • js/state.js
+    - Version bumped to 1.8
+
+Files Deleted:
+
+  • js/optimization/ directory (1,680 lines total)
+    - Optimizer.js (1,144 lines) - Simulated annealing implementation
+    - CostFunction.js (536 lines) - Cost calculations and penalties
+
+  • js/render/ResultsGraph.js
+    - Results graph visualization (referenced but not counted above)
+
+Documentation Updated:
+
+  • claude.md - Added Phase 10 section documenting removal, updated Overview, removed
+    "Optimization" feature section, removed "Optimization Algorithm Details" section,
+    updated File Structure to remove optimization directory
+  • versionlog.txt - Added V1.8 changelog
+
+Total Impact:
+  • Over 2,100 lines of code removed across 4 files
+  • 1 directory completely deleted (optimization/)
+  • Simplified codebase for better maintainability
+  • Alignment constraints remain fully functional
+  • Manual component arrangement still fully supported
+
+================================================================================
+
 Version 1.7 (2025-12-05)
 --------------------------------------------------------------------------------
 Breaking Changes:

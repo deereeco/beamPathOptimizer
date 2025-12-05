@@ -13,7 +13,7 @@ import * as BeamPhysics from './physics/BeamPhysics.js';
  */
 export const APP_VERSION = {
     major: 1,
-    minor: 7,
+    minor: 8,
     toString() {
         return `V${this.major}.${this.minor}`;
     },
