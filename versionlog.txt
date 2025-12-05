@@ -1,6 +1,104 @@
 BEAM PATH OPTIMIZER - VERSION LOG
 ================================================================================
 
+Version 1.7 (2025-12-05)
+--------------------------------------------------------------------------------
+Breaking Changes:
+
+  • Path Length Constraints - REMOVED
+    - Removed entire path length constraint system due to complexity and instability
+    - Includes manual fold-based constraints (L-shape and U-shape)
+    - Includes automatic fold geometry calculations (FoldGeometry.js)
+    - Includes fixed input/output/reflected distance constraints
+    - Feature was not working reliably and could break the application
+    - Will be re-implemented in a future version with more careful design
+
+    What was removed:
+    - Path length constraint creation and management UI
+    - Fold count controls (0/1/2 folds)
+    - Automatic mirror creation/removal for folds
+    - Synchronized movement of constrained components
+    - Mirror dragging to maintain path lengths
+    - Fixed distance constraints for lenses and beam splitters
+    - Path length validation during component movement
+    - Fold geometry rendering and visualization
+
+    Alternative:
+    - Users can still use Alignment Constraints (V/H keys) for persistent
+      component relationships that move together
+
+Files Modified:
+
+  • js/state.js
+    - Version bumped to 1.7
+    - Removed FoldGeometry import
+    - Removed validatePathLengthConstraints() function
+    - Removed recalculateLensPositionFromMirror() function
+    - Removed recalculateMirrorPositionsFromLens() function
+    - Removed path length validation from UPDATE_COMPONENT reducer
+    - Removed fold constraint logic from MOVE_COMPONENT reducer (~300 lines)
+    - Removed fold constraint logic from ROTATE_CONSTRAINED_PAIR reducer
+    - Removed path length constraint cleanup from DELETE_COMPONENT reducer
+    - Simplified component movement logic
+
+  • js/models/Component.js
+    - Removed pathConstraints property (enabled, inputDistance, outputDistance, reflectedDistance)
+    - Removed pathLengthConstraints array property
+    - Updated constructor to exclude removed properties
+    - Updated toJSON() serialization to exclude removed properties
+    - Updated update() whitelist to exclude removed properties
+
+  • index.html
+    - Removed Path Constraints UI section (~50 lines)
+    - Removed enable checkbox
+    - Removed input/output/reflected distance controls
+    - Removed path length constraints list
+    - Removed "Add Path Length Constraint" button
+
+  • js/render/Renderer.js
+    - Removed drawFoldGuides() method (~105 lines)
+    - Removed fold guide rendering from main render loop
+    - Removed fold geometry visualization
+    - Removed path length constraint status indicators
+
+  • js/main.js
+    - Removed path constraint UI bindings (~100 lines)
+    - Removed createPathLengthConstraint() method
+    - Removed removePathLengthConstraint() method
+    - Removed changeFoldCount() method
+    - Removed updateMirrorsForConstraint() method
+    - Removed calculateOneFoldGeometry() method
+    - Removed calculateTwoFoldGeometry() method
+    - Removed rotateConstraintSystemRigidBody() method
+    - Removed path constraint properties panel updates
+    - Removed path length constraints list rendering
+    - Removed fold constraint checks from rotation logic
+    - Removed fold constraint checks from drag operations
+    - Removed segment fixed length assignment
+    - Simplified component rotation to basic angle update
+
+Files Deleted:
+
+  • js/physics/FoldGeometry.js (352 lines)
+    - Automatic fold geometry calculation system
+    - calculateFoldGeometry() function
+    - Path length validation algorithms
+    - L-shape and U-shape geometry calculations
+
+Documentation Updated:
+
+  • claude.md - Phase 9 section replaced with removal notice
+  • README.md - Removed path length constraints section, updated version to 1.7
+  • versionlog.txt - Added V1.7 changelog
+
+Total Impact:
+  • Over 1,100 lines of code removed across 6 files
+  • 1 file completely deleted
+  • Simplified codebase for better maintainability
+  • Alignment constraints remain fully functional
+
+================================================================================
+
 Version 1.6 (2025-12-04)
 --------------------------------------------------------------------------------
 New Features:

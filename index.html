@@ -387,55 +387,11 @@
                             </div>
                         </div>
 
-                        <!-- Path Length Constraints (for lenses and beam splitters) -->
-                        <div class="property-group" id="path-constraint-group" style="display:none;">
-                            <label class="property-label">Path Constraints</label>
-                            <div class="path-constraint-controls">
-                                <label class="path-constraint-toggle">
-                                    <input type="checkbox" id="prop-path-constraint-enabled">
-                                    <span>Enable fixed distances</span>
-                                </label>
-                                <div class="path-constraint-details" id="path-constraint-details" style="display:none;">
-                                    <div class="path-constraint-row" id="input-distance-row">
-                                        <label>
-                                            <input type="checkbox" id="prop-fix-input-dist">
-                                            Input distance:
-                                        </label>
-                                        <input type="number" id="prop-input-distance" class="property-input small" min="1" placeholder="mm" disabled> mm
-                                    </div>
-                                    <div class="path-constraint-row" id="output-distance-row">
-                                        <label>
-                                            <input type="checkbox" id="prop-fix-output-dist">
-                                            Output distance:
-                                        </label>
-                                        <input type="number" id="prop-output-distance" class="property-input small" min="1" placeholder="mm" disabled> mm
-                                    </div>
-                                    <div class="path-constraint-row" id="reflected-distance-row" style="display:none;">
-                                        <label>
-                                            <input type="checkbox" id="prop-fix-reflected-dist">
-                                            Reflected distance:
-                                        </label>
-                                        <input type="number" id="prop-reflected-distance" class="property-input small" min="1" placeholder="mm" disabled> mm
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
                         <div class="property-group" id="alignment-constraint-group">
                             <label class="property-label">Alignment Constraints</label>
                             <div id="alignment-constraints-list" class="alignment-constraints-list">
                                 <!-- Dynamically populated -->
                             </div>
-                        </div>
-
-                        <div class="property-group" id="path-length-constraint-group">
-                            <label class="property-label">Path Length Constraints</label>
-                            <div id="path-length-constraints-list" class="path-length-constraints-list">
-                                <!-- Dynamically populated -->
-                            </div>
-                            <button id="btn-add-path-constraint" class="action-btn small constraint-add-btn">
-                                + Add Path Length Constraint
-                            </button>
                         </div>
 
                         <div class="property-actions">

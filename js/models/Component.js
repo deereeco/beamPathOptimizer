@@ -202,24 +202,9 @@ export class Component {
         this.labelVisible = props.labelVisible ?? true;
         this.labelBackgroundColor = props.labelBackgroundColor || 'auto'; // 'auto' or custom color
 
-        // Fixed path length constraints (for lenses and beam splitter reflected outputs)
-        this.pathConstraints = props.pathConstraints
-            ? { ...props.pathConstraints }
-            : {
-                enabled: false,
-                inputDistance: null,     // Fixed distance from previous component (mm)
-                outputDistance: null,    // Fixed distance to next component (mm)
-                reflectedDistance: null  // For beam splitters: fixed distance for reflected beam (mm)
-            };
-
         // Alignment constraints (for maintaining horizontal/vertical alignment with other components)
         // Array of {componentId: string, type: 'horizontal' | 'vertical'}
         this.alignmentConstraints = props.alignmentConstraints || [];
-
-        // Path length constraints (for maintaining fixed optical path length between components)
-        // Array of {targetComponentId: string, targetPathLength: number (mm), tolerance: number (mm), foldMode: 'auto'|'disabled'}
-        // foldMode: 'auto' = fold-based system with visual guides, 'disabled' = blocking validation only
-        this.pathLengthConstraints = props.pathLengthConstraints || [];
 
         // Metadata
         this.notes = props.notes || '';
@@ -586,7 +571,7 @@ export class Component {
         const updatableProps = ['name', 'position', 'angle', 'size', 'mass',
                                 'reflectance', 'transmittance', 'isFixed', 'isAngleFixed', 'notes', 'mountZone',
                                 'emitLight', 'isShallowAngle', 'shallowAngle', 'snapToGrid',
-                                'allowAnyAngle', 'pathConstraints', 'alignmentConstraints', 'pathLengthConstraints',
+                                'allowAnyAngle', 'alignmentConstraints',
                                 'labelPosition', 'labelVisible', 'labelBackgroundColor'];
 
         for (const key of updatableProps) {
@@ -644,9 +629,7 @@ export class Component {
             shallowAngle: this.shallowAngle,
             snapToGrid: this.snapToGrid,
             allowAnyAngle: this.allowAnyAngle,
-            pathConstraints: { ...this.pathConstraints },
             alignmentConstraints: this.alignmentConstraints ? [...this.alignmentConstraints] : [],
-            pathLengthConstraints: this.pathLengthConstraints ? [...this.pathLengthConstraints] : [],
             labelPosition: this.labelPosition,
             labelVisible: this.labelVisible,
             labelBackgroundColor: this.labelBackgroundColor,

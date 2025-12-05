@@ -987,111 +987,6 @@ export class Renderer {
         ctx.fill();
     }
 
-    /**
-     * Draw fold guide lines for path length constraints
-     */
-    drawFoldGuides(components, viewport) {
-        const ctx = this.ctx;
-
-        // Import FoldGeometry dynamically if needed
-        const FoldGeometry = window.FoldGeometry;
-        if (!FoldGeometry) return;
-
-        components.forEach(component => {
-            if (!component.pathLengthConstraints) return;
-
-            component.pathLengthConstraints.forEach(constraint => {
-                // Only draw guides for auto fold mode
-                if (constraint.foldMode !== 'auto') return;
-
-                const target = components.get ? components.get(constraint.targetComponentId) :
-                    Array.from(components).find(c => c.id === constraint.targetComponentId);
-                if (!target) return;
-
-                // Calculate fold geometry
-                const geometry = FoldGeometry.calculate(
-                    component,
-                    target,
-                    constraint.targetPathLength
-                );
-
-                // Determine colors based on validity
-                const strokeColor = geometry.valid ? 'rgba(100, 200, 255, 0.5)' : 'rgba(255, 100, 100, 0.5)';
-                const fillColor = geometry.valid ? 'rgba(100, 200, 255, 0.3)' : 'rgba(255, 100, 100, 0.3)';
-
-                // Draw fold path segments
-                ctx.strokeStyle = strokeColor;
-                ctx.lineWidth = 2;
-                ctx.setLineDash([8, 4]);
-                ctx.lineCap = 'round';
-
-                if (geometry.segments && geometry.segments.length > 0) {
-                    geometry.segments.forEach(segment => {
-                        const startScreen = this.worldToScreen(segment.start.x, segment.start.y, viewport);
-                        const endScreen = this.worldToScreen(segment.end.x, segment.end.y, viewport);
-
-                        ctx.beginPath();
-                        ctx.moveTo(startScreen.x, startScreen.y);
-                        ctx.lineTo(endScreen.x, endScreen.y);
-                        ctx.stroke();
-
-                        // Draw segment length label
-                        const midX = (startScreen.x + endScreen.x) / 2;
-                        const midY = (startScreen.y + endScreen.y) / 2;
-                        this.drawSegmentLabel(ctx, midX, midY, `${segment.length.toFixed(1)}mm`);
-                    });
-                }
-
-                // Draw fold vertices
-                if (geometry.folds && geometry.folds.length > 0) {
-                    ctx.fillStyle = fillColor;
-                    ctx.strokeStyle = strokeColor;
-                    ctx.lineWidth = 1.5;
-                    ctx.setLineDash([]);
-
-                    geometry.folds.forEach(fold => {
-                        const foldScreen = this.worldToScreen(fold.x, fold.y, viewport);
-
-                        ctx.beginPath();
-                        ctx.arc(foldScreen.x, foldScreen.y, 5, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.stroke();
-                    });
-                }
-
-                // Reset line dash
-                ctx.setLineDash([]);
-
-                // Draw error message if invalid
-                if (!geometry.valid && geometry.error) {
-                    const midScreen = this.worldToScreen(
-                        (component.position.x + target.position.x) / 2,
-                        (component.position.y + target.position.y) / 2,
-                        viewport
-                    );
-
-                    ctx.fillStyle = 'rgba(255, 50, 50, 0.9)';
-                    ctx.font = '11px monospace';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-
-                    // Draw background
-                    const metrics = ctx.measureText(geometry.error);
-                    const padding = 4;
-                    ctx.fillRect(
-                        midScreen.x - metrics.width / 2 - padding,
-                        midScreen.y - 8,
-                        metrics.width + padding * 2,
-                        16
-                    );
-
-                    // Draw text
-                    ctx.fillStyle = '#fff';
-                    ctx.fillText(geometry.error, midScreen.x, midScreen.y);
-                }
-            });
-        });
-    }
 
     /**
      * Draw segment label with background
@@ -1286,9 +1181,6 @@ export class Renderer {
 
         // Draw beam paths (with selection state for highlighting)
         this.drawBeamPaths(beamPath, Array.from(components.values()), viewport, selection, wavelengths);
-
-        // Draw fold guide lines for path length constraints
-        this.drawFoldGuides(components, viewport);
 
         // Collect mount zone violations for highlighting
         const mountZoneViolations = new Set();

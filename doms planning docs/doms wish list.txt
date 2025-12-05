@@ -1,0 +1,6 @@
+[] - when i select all components and hit the letter U, i get a notification that constraints were removed, but when i then select one
+component and drag it, there are still a ton on constraints left. why is this? 
+
+
+[w] - the 'path length constraints' are not working well and they can break things it seems. should we remove them to clean things up? i will
+probably want to redo them in the future in a more careful way.

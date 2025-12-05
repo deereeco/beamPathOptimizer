@@ -3381,6 +3381,530 @@ class BeamPathOptimizerApp {
         });
     }
 
+    /**
+     * Remove a path length constraint between two components
+     */
+    removePathLengthConstraint(sourceId, targetId) {
+        const state = this.store.getState();
+        const source = state.components.get(sourceId);
+        const target = state.components.get(targetId);
+
+        if (!source || !target) return;
+
+        // Remove constraint from source
+        if (source.pathLengthConstraints) {
+            const sourceConstraints = source.pathLengthConstraints.filter(
+                c => c.targetComponentId !== targetId
+            );
+            this.store.dispatch(actions.updateComponent(sourceId, {
+                pathLengthConstraints: sourceConstraints
+            }));
+        }
+
+        // Remove constraint from target
+        if (target.pathLengthConstraints) {
+            const targetConstraints = target.pathLengthConstraints.filter(
+                c => c.targetComponentId !== sourceId
+            );
+            this.store.dispatch(actions.updateComponent(targetId, {
+                pathLengthConstraints: targetConstraints
+            }));
+        }
+
+        this.showToast('Path length constraint removed', 'success');
+    }
+
+    /**
+     * Change fold count for a path length constraint
+     * This will create/remove mirrors and recalculate geometry
+     */
+    changeFoldCount(sourceId, targetId, newFoldCount) {
+        const state = this.store.getState();
+        const source = state.components.get(sourceId);
+        const target = state.components.get(targetId);
+
+        if (!source || !target) {
+            this.showToast('Components not found', 'error');
+            return;
+        }
+
+        // Find the constraint
+        const sourceConstraint = source.pathLengthConstraints?.find(c => c.targetComponentId === targetId);
+        if (!sourceConstraint || sourceConstraint.mode !== 'foldable') {
+            this.showToast('Constraint not found', 'error');
+            return;
+        }
+
+        const oldFoldCount = sourceConstraint.foldCount || 0;
+        if (oldFoldCount === newFoldCount) return; // No change
+
+        // Update both constraints with new fold count
+        const updatedSourceConstraints = source.pathLengthConstraints.map(c => {
+            if (c.targetComponentId === targetId) {
+                return { ...c, foldCount: newFoldCount };
+            }
+            return c;
+        });
+
+        const updatedTargetConstraints = target.pathLengthConstraints.map(c => {
+            if (c.targetComponentId === sourceId) {
+                return { ...c, foldCount: newFoldCount };
+            }
+            return c;
+        });
+
+        this.store.dispatch(actions.updateComponent(sourceId, {
+            pathLengthConstraints: updatedSourceConstraints
+        }));
+
+        this.store.dispatch(actions.updateComponent(targetId, {
+            pathLengthConstraints: updatedTargetConstraints
+        }));
+
+        // Phase 3 & 4: Create/remove mirrors and calculate positions
+        this.updateMirrorsForConstraint(sourceId, targetId, newFoldCount);
+
+        this.showToast(`Fold count changed to ${newFoldCount}`, 'success');
+    }
+
+    /**
+     * Create/remove mirrors and calculate positions for a fold constraint
+     */
+    updateMirrorsForConstraint(sourceId, targetId, foldCount) {
+        const state = this.store.getState();
+        const source = state.components.get(sourceId);
+        const target = state.components.get(targetId);
+
+        if (!source || !target) return;
+
+        const sourceConstraint = source.pathLengthConstraints?.find(c => c.targetComponentId === targetId);
+        if (!sourceConstraint) return;
+
+        // Delete old mirrors
+        const oldMirrorIds = sourceConstraint.mirrorIds || [];
+        oldMirrorIds.forEach(mirrorId => {
+            this.store.dispatch(actions.deleteComponent(mirrorId));
+        });
+
+        // Create new mirrors based on fold count
+        const newMirrorIds = [];
+        const pathLength = sourceConstraint.targetPathLength;
+
+        if (foldCount === 0) {
+            // No mirrors, restore lenses to original H/V alignment
+            // Determine alignment based on positions
+            const dx = target.position.x - source.position.x;
+            const dy = target.position.y - source.position.y;
+
+            // Restore original angles based on alignment
+            if (Math.abs(dx) > Math.abs(dy)) {
+                // Horizontal alignment
+                this.store.dispatch(actions.updateComponent(sourceId, {
+                    angle: dx > 0 ? 0 : 180
+                }));
+                this.store.dispatch(actions.updateComponent(targetId, {
+                    angle: dx > 0 ? 0 : 180
+                }));
+            } else {
+                // Vertical alignment
+                this.store.dispatch(actions.updateComponent(sourceId, {
+                    angle: dy > 0 ? 90 : 270
+                }));
+                this.store.dispatch(actions.updateComponent(targetId, {
+                    angle: dy > 0 ? 90 : 270
+                }));
+            }
+
+            // Create direct beam segment
+            this.createBeamSegmentsForFoldPath(sourceId, targetId);
+        } else if (foldCount === 1) {
+            // 1 mirror: L-shaped path
+            // Calculate mirror position and angles
+            const geometry = this.calculateOneFoldGeometry(source, target, pathLength);
+
+            if (geometry) {
+                // Create mirror
+                const mirror = new Component({
+                    type: ComponentType.MIRROR,
+                    position: geometry.mirrorPosition,
+                    angle: geometry.mirrorAngle,
+                    name: `M_${source.name}_${target.name}`
+                });
+
+                this.store.dispatch(actions.addComponent(mirror));
+                newMirrorIds.push(mirror.id);
+
+                // Move and rotate lenses to match fold geometry
+                this.store.dispatch(actions.updateComponent(sourceId, {
+                    angle: geometry.sourceAngle
+                }));
+                this.store.dispatch(actions.updateComponent(targetId, {
+                    position: geometry.targetPosition,
+                    angle: geometry.targetAngle
+                }));
+
+                // Create beam segments to visualize path
+                this.createBeamSegmentsForFoldPath(sourceId, mirror.id, targetId);
+            }
+        } else if (foldCount === 2) {
+            // 2 mirrors: Z-shaped path
+            const geometry = this.calculateTwoFoldGeometry(source, target, pathLength);
+
+            if (geometry) {
+                // Create first mirror
+                const mirror1 = new Component({
+                    type: ComponentType.MIRROR,
+                    position: geometry.mirror1Position,
+                    angle: geometry.mirror1Angle,
+                    name: `M1_${source.name}_${target.name}`
+                });
+
+                this.store.dispatch(actions.addComponent(mirror1));
+                newMirrorIds.push(mirror1.id);
+
+                // Create second mirror
+                const mirror2 = new Component({
+                    type: ComponentType.MIRROR,
+                    position: geometry.mirror2Position,
+                    angle: geometry.mirror2Angle,
+                    name: `M2_${source.name}_${target.name}`
+                });
+
+                this.store.dispatch(actions.addComponent(mirror2));
+                newMirrorIds.push(mirror2.id);
+
+                // Move and rotate lenses to match fold geometry
+                this.store.dispatch(actions.updateComponent(sourceId, {
+                    angle: geometry.sourceAngle
+                }));
+                this.store.dispatch(actions.updateComponent(targetId, {
+                    position: geometry.targetPosition,
+                    angle: geometry.targetAngle
+                }));
+
+                // Create beam segments to visualize path
+                this.createBeamSegmentsForFoldPath(sourceId, mirror1.id, mirror2.id, targetId);
+            }
+        }
+
+        // Update constraint with new mirror IDs
+        const freshState = this.store.getState();
+        const freshSource = freshState.components.get(sourceId);
+        const freshTarget = freshState.components.get(targetId);
+
+        if (freshSource) {
+            const updatedSourceConstraints = freshSource.pathLengthConstraints.map(c => {
+                if (c.targetComponentId === targetId) {
+                    return { ...c, mirrorIds: newMirrorIds };
+                }
+                return c;
+            });
+
+            this.store.dispatch(actions.updateComponent(sourceId, {
+                pathLengthConstraints: updatedSourceConstraints
+            }));
+        }
+
+        if (freshTarget) {
+            const updatedTargetConstraints = freshTarget.pathLengthConstraints.map(c => {
+                if (c.targetComponentId === sourceId) {
+                    return { ...c, mirrorIds: newMirrorIds };
+                }
+                return c;
+            });
+
+            this.store.dispatch(actions.updateComponent(targetId, {
+                pathLengthConstraints: updatedTargetConstraints
+            }));
+        }
+    }
+
+    /**
+     * Create beam segments to visualize fold path
+     */
+    createBeamSegmentsForFoldPath(...componentIds) {
+        // componentIds can be: [source, mirror, target] for 1 fold
+        // or [source, mirror1, mirror2, target] for 2 folds
+
+        const state = this.store.getState();
+
+        // Remove any existing beam segments between these components
+        const idsSet = new Set(componentIds);
+        state.beamPath.getAllSegments().forEach(seg => {
+            if (idsSet.has(seg.sourceId) || idsSet.has(seg.targetId)) {
+                this.store.dispatch(actions.deleteBeamSegment(seg.id));
+            }
+        });
+
+        // Create new segments connecting components in sequence
+        for (let i = 0; i < componentIds.length - 1; i++) {
+            const sourceId = componentIds[i];
+            const targetId = componentIds[i + 1];
+
+            const sourceComp = state.components.get(sourceId);
+            const targetComp = state.components.get(targetId);
+
+            if (!sourceComp || !targetComp) continue;
+
+            // Calculate segment
+            const segment = this.createDirectBeamSegment(sourceId, targetId);
+            if (segment) {
+                this.store.dispatch(actions.addBeamSegment(segment));
+            }
+        }
+    }
+
+    /**
+     * Calculate geometry for 1 fold (L-shaped path)
+     */
+    calculateOneFoldGeometry(source, target, pathLength) {
+        // For 1 fold: L-shaped path with 90° turn at mirror
+        // Key insight: For an L, if source is horizontal, beam goes right then turns 90° up/down
+
+        const dx = target.position.x - source.position.x;
+        const dy = target.position.y - source.position.y;
+
+        // Determine if we're primarily horizontal or vertical
+        const isHorizontalMajor = Math.abs(dx) > Math.abs(dy);
+
+        let sourceAngle, mirrorPos, afterReflectionAngle, mirrorAngle, targetAngle;
+
+        if (isHorizontalMajor) {
+            // Horizontal then vertical L-shape
+            // Source points right (0°) or left (180°)
+            sourceAngle = dx > 0 ? 0 : 180;
+
+            // Split path length in half for each segment
+            const horizontalDist = pathLength / 2;
+            const verticalDist = pathLength / 2;
+
+            // Mirror at the corner of the L
+            mirrorPos = {
+                x: source.position.x + (dx > 0 ? horizontalDist : -horizontalDist),
+                y: source.position.y
+            };
+
+            // Beam turns 90° (up or down based on target position)
+            afterReflectionAngle = dy > 0 ? 90 : 270;
+
+            // Mirror at 45° to create 90° reflection
+            mirrorAngle = dx > 0 ? (dy > 0 ? 45 : 315) : (dy > 0 ? 135 : 225);
+
+            // Target lens position at end of vertical segment
+            const targetPos = {
+                x: mirrorPos.x,
+                y: mirrorPos.y + (dy > 0 ? verticalDist : -verticalDist)
+            };
+
+            // Target lens faces INCOMING beam
+            targetAngle = (afterReflectionAngle + 180) % 360;
+
+            return {
+                mirrorPosition: mirrorPos,
+                mirrorAngle: mirrorAngle,
+                sourceAngle: sourceAngle,
+                targetAngle: targetAngle,
+                targetPosition: targetPos
+            };
+
+        } else {
+            // Vertical then horizontal L-shape
+            // Source points up (90°) or down (270°)
+            sourceAngle = dy > 0 ? 90 : 270;
+
+            const verticalDist = pathLength / 2;
+            const horizontalDist = pathLength / 2;
+
+            // Mirror at the corner of the L
+            mirrorPos = {
+                x: source.position.x,
+                y: source.position.y + (dy > 0 ? verticalDist : -verticalDist)
+            };
+
+            // Beam turns 90° (left or right based on target position)
+            afterReflectionAngle = dx > 0 ? 0 : 180;
+
+            // Mirror at 45° to create 90° reflection
+            mirrorAngle = dy > 0 ? (dx > 0 ? 45 : 135) : (dx > 0 ? 315 : 225);
+
+            // Target lens position at end of horizontal segment
+            const targetPos = {
+                x: mirrorPos.x + (dx > 0 ? horizontalDist : -horizontalDist),
+                y: mirrorPos.y
+            };
+
+            // Target lens faces INCOMING beam
+            targetAngle = (afterReflectionAngle + 180) % 360;
+
+            return {
+                mirrorPosition: mirrorPos,
+                mirrorAngle: mirrorAngle,
+                sourceAngle: sourceAngle,
+                targetAngle: targetAngle,
+                targetPosition: targetPos
+            };
+        }
+    }
+
+    /**
+     * Rotate entire constraint system as a rigid body
+     * Rotates both lenses + all mirrors around the center point
+     */
+    rotateConstraintSystemRigidBody(componentId, angleDelta) {
+        const state = this.store.getState();
+        const component = state.components.get(componentId);
+
+        if (!component) return;
+
+        // Find foldable constraint
+        const constraint = component.pathLengthConstraints?.find(c => c.mode === 'foldable');
+        if (!constraint) return;
+
+        const partner = state.components.get(constraint.targetComponentId);
+        if (!partner) return;
+
+        // Calculate rotation center (midpoint between lenses)
+        const centerX = (component.position.x + partner.position.x) / 2;
+        const centerY = (component.position.y + partner.position.y) / 2;
+
+        const angleDeltaRad = angleDelta * Math.PI / 180;
+        const cosAngle = Math.cos(angleDeltaRad);
+        const sinAngle = Math.sin(angleDeltaRad);
+
+        // Collect all components to rotate
+        const componentsToRotate = [
+            { id: componentId, comp: component },
+            { id: constraint.targetComponentId, comp: partner }
+        ];
+
+        // Add mirrors
+        (constraint.mirrorIds || []).forEach(mirrorId => {
+            const mirror = state.components.get(mirrorId);
+            if (mirror) {
+                componentsToRotate.push({ id: mirrorId, comp: mirror });
+            }
+        });
+
+        // Rotate each component
+        componentsToRotate.forEach(({ id, comp }) => {
+            // Translate to origin
+            const relX = comp.position.x - centerX;
+            const relY = comp.position.y - centerY;
+
+            // Rotate
+            const rotatedX = relX * cosAngle - relY * sinAngle;
+            const rotatedY = relX * sinAngle + relY * cosAngle;
+
+            // Translate back
+            const newPos = {
+                x: rotatedX + centerX,
+                y: rotatedY + centerY
+            };
+
+            // Rotate angle
+            const newAngle = (comp.angle + angleDelta + 360) % 360;
+
+            this.store.dispatch(actions.updateComponent(id, {
+                position: newPos,
+                angle: newAngle
+            }));
+        });
+    }
+
+    /**
+     * Calculate geometry for 2 folds (U-shaped path)
+     */
+    calculateTwoFoldGeometry(source, target, pathLength) {
+        // For 2 folds: U-shaped path with two 90° turns
+        // Beam goes out, turns 90°, travels across, turns 90° back toward source
+        // Lenses end up parallel facing OPPOSITE directions (180° apart)
+
+        const dx = target.position.x - source.position.x;
+        const dy = target.position.y - source.position.y;
+
+        // Determine if we're primarily horizontal or vertical
+        const isHorizontalMajor = Math.abs(dx) > Math.abs(dy);
+
+        // Divide into 3 equal segments
+        const segmentLength = pathLength / 3;
+
+        let sourceAngle, mirror1Pos, mirror2Pos, targetPos, mirror1Angle, mirror2Angle, targetAngle;
+
+        if (isHorizontalMajor) {
+            // Horizontal U-shape: go right, up, back left (or mirrored)
+            sourceAngle = dx > 0 ? 0 : 180;
+
+            // First mirror at end of first horizontal segment
+            mirror1Pos = {
+                x: source.position.x + (dx > 0 ? segmentLength : -segmentLength),
+                y: source.position.y
+            };
+
+            // Second mirror at end of vertical segment
+            const verticalDir = dy > 0 ? 1 : -1;
+            mirror2Pos = {
+                x: mirror1Pos.x,
+                y: mirror1Pos.y + verticalDir * segmentLength
+            };
+
+            // Target at end of final horizontal segment (back toward source)
+            targetPos = {
+                x: mirror2Pos.x + (dx > 0 ? -segmentLength : segmentLength),
+                y: mirror2Pos.y
+            };
+
+            // Mirror angles for 90° reflections
+            mirror1Angle = dx > 0 ? (dy > 0 ? 45 : 315) : (dy > 0 ? 135 : 225);
+            mirror2Angle = dx > 0 ? (dy > 0 ? 135 : 225) : (dy > 0 ? 45 : 315);
+
+            // Target lens faces OPPOSITE to source (180° different)
+            targetAngle = (sourceAngle + 180) % 360;
+
+        } else {
+            // Vertical U-shape: go up, right, back down (or mirrored)
+            sourceAngle = dy > 0 ? 90 : 270;
+
+            // First mirror at end of first vertical segment
+            mirror1Pos = {
+                x: source.position.x,
+                y: source.position.y + (dy > 0 ? segmentLength : -segmentLength)
+            };
+
+            // Second mirror at end of horizontal segment
+            const horizontalDir = dx > 0 ? 1 : -1;
+            mirror2Pos = {
+                x: mirror1Pos.x + horizontalDir * segmentLength,
+                y: mirror1Pos.y
+            };
+
+            // Target at end of final vertical segment (back toward source)
+            targetPos = {
+                x: mirror2Pos.x,
+                y: mirror2Pos.y + (dy > 0 ? -segmentLength : segmentLength)
+            };
+
+            // Mirror angles for 90° reflections
+            mirror1Angle = dy > 0 ? (dx > 0 ? 45 : 135) : (dx > 0 ? 315 : 225);
+            mirror2Angle = dy > 0 ? (dx > 0 ? 315 : 225) : (dx > 0 ? 45 : 135);
+
+            // Target lens faces OPPOSITE to source (180° different)
+            targetAngle = (sourceAngle + 180) % 360;
+        }
+
+        return {
+            mirror1Position: mirror1Pos,
+            mirror1Angle: mirror1Angle,
+            mirror2Position: mirror2Pos,
+            mirror2Angle: mirror2Angle,
+            sourceAngle: sourceAngle,
+            targetAngle: targetAngle,
+            targetPosition: targetPos
+        };
+    }
+
+    /**
+     * Calculate path length between selected components (for UI display)
+     */
     getPathLengthBetween(sourceId, targetId) {
         const state = this.store.getState();
         return state.beamPath.calculatePathLengthBetween(sourceId, targetId);
@@ -3908,6 +4432,50 @@ class BeamPathOptimizerApp {
             // Allow any angle toggle
             document.getElementById('prop-allow-any-angle').checked = component.allowAnyAngle || false;
 
+            // Path length constraints (for lenses and beam splitters)
+            const pathConstraintGroup = document.getElementById('path-constraint-group');
+            if (component.type === ComponentType.LENS || component.type === ComponentType.BEAM_SPLITTER) {
+                pathConstraintGroup.style.display = 'block';
+
+                const constraints = component.pathConstraints || {};
+                const isEnabled = constraints.enabled || false;
+
+                document.getElementById('prop-path-constraint-enabled').checked = isEnabled;
+                document.getElementById('path-constraint-details').style.display = isEnabled ? 'block' : 'none';
+
+                // Input distance
+                const hasInputDist = constraints.inputDistance !== null && constraints.inputDistance !== undefined;
+                document.getElementById('prop-fix-input-dist').checked = hasInputDist;
+                document.getElementById('prop-input-distance').value = constraints.inputDistance || '';
+                document.getElementById('prop-input-distance').disabled = !hasInputDist;
+
+                // Output distance (for lenses only)
+                const outputRow = document.getElementById('output-distance-row');
+                if (component.type === ComponentType.LENS) {
+                    outputRow.style.display = 'flex';
+                    const hasOutputDist = constraints.outputDistance !== null && constraints.outputDistance !== undefined;
+                    document.getElementById('prop-fix-output-dist').checked = hasOutputDist;
+                    document.getElementById('prop-output-distance').value = constraints.outputDistance || '';
+                    document.getElementById('prop-output-distance').disabled = !hasOutputDist;
+                } else {
+                    outputRow.style.display = 'none';
+                }
+
+                // Reflected distance (for beam splitters only)
+                const reflectedRow = document.getElementById('reflected-distance-row');
+                if (component.type === ComponentType.BEAM_SPLITTER) {
+                    reflectedRow.style.display = 'flex';
+                    const hasReflectedDist = constraints.reflectedDistance !== null && constraints.reflectedDistance !== undefined;
+                    document.getElementById('prop-fix-reflected-dist').checked = hasReflectedDist;
+                    document.getElementById('prop-reflected-distance').value = constraints.reflectedDistance || '';
+                    document.getElementById('prop-reflected-distance').disabled = !hasReflectedDist;
+                } else {
+                    reflectedRow.style.display = 'none';
+                }
+            } else {
+                pathConstraintGroup.style.display = 'none';
+            }
+
             // Alignment Constraints
             const alignmentConstraintsList = document.getElementById('alignment-constraints-list');
             if (alignmentConstraintsList) {
@@ -3955,6 +4523,175 @@ class BeamPathOptimizerApp {
                 }
             }
 
+            // Display path length constraints
+            const pathLengthConstraintsList = document.getElementById('path-length-constraints-list');
+            if (pathLengthConstraintsList) {
+                pathLengthConstraintsList.innerHTML = '';
+
+                if (component.pathLengthConstraints && component.pathLengthConstraints.length > 0) {
+                    component.pathLengthConstraints.forEach(constraint => {
+                        const targetComp = state.components.get(constraint.targetComponentId);
+                        if (!targetComp) return; // Component might have been deleted
+
+                        // Calculate current path length
+                        const currentLength = state.beamPath.calculatePathLengthBetween(
+                            component.id,
+                            constraint.targetComponentId
+                        );
+
+                        // Determine status
+                        let status = 'inactive';
+                        let statusIcon = '⊗';
+                        if (currentLength !== null) {
+                            const deviation = Math.abs(currentLength - constraint.targetPathLength);
+                            const tolerance = constraint.tolerance || 1.0;
+                            if (deviation <= tolerance) {
+                                status = 'satisfied';
+                                statusIcon = '✓';
+                            } else {
+                                status = 'violated';
+                                statusIcon = '⚠';
+                            }
+                        }
+
+                        const item = document.createElement('div');
+                        item.className = `path-constraint-item ${status}`;
+
+                        // Header
+                        const header = document.createElement('div');
+                        header.className = 'path-constraint-header';
+
+                        const icon = document.createElement('span');
+                        icon.className = 'path-constraint-icon';
+                        icon.textContent = '↔';
+
+                        const target = document.createElement('span');
+                        target.className = 'path-constraint-target';
+                        target.textContent = targetComp.name;
+
+                        const removeBtn = document.createElement('button');
+                        removeBtn.className = 'path-constraint-remove';
+                        removeBtn.textContent = '×';
+                        removeBtn.title = 'Remove constraint';
+                        removeBtn.addEventListener('click', () => {
+                            this.removePathLengthConstraint(component.id, constraint.targetComponentId);
+                        });
+
+                        header.appendChild(icon);
+                        header.appendChild(target);
+                        header.appendChild(removeBtn);
+
+                        // Details
+                        const details = document.createElement('div');
+                        details.className = 'path-constraint-details';
+
+                        // Target length row
+                        const targetRow = document.createElement('div');
+                        targetRow.className = 'path-constraint-row';
+
+                        const targetLabel = document.createElement('span');
+                        targetLabel.className = 'path-constraint-label';
+                        targetLabel.textContent = 'Target:';
+
+                        const targetValue = document.createElement('span');
+                        targetValue.className = 'path-constraint-value';
+                        targetValue.textContent = `${constraint.targetPathLength.toFixed(1)} mm`;
+
+                        targetRow.appendChild(targetLabel);
+                        targetRow.appendChild(targetValue);
+
+                        // Current length row
+                        const currentRow = document.createElement('div');
+                        currentRow.className = 'path-constraint-row';
+
+                        const currentLabel = document.createElement('span');
+                        currentLabel.className = 'path-constraint-label';
+                        currentLabel.textContent = 'Current:';
+
+                        const currentValue = document.createElement('span');
+                        currentValue.className = `path-constraint-current ${status}`;
+                        if (currentLength !== null) {
+                            currentValue.textContent = `${currentLength.toFixed(1)} mm`;
+                        } else {
+                            currentValue.textContent = 'No path';
+                        }
+
+                        const statusIconSpan = document.createElement('span');
+                        statusIconSpan.className = 'path-constraint-status-icon';
+                        statusIconSpan.textContent = statusIcon;
+
+                        currentValue.appendChild(statusIconSpan);
+                        currentRow.appendChild(currentLabel);
+                        currentRow.appendChild(currentValue);
+
+                        details.appendChild(targetRow);
+                        details.appendChild(currentRow);
+
+                        // Fold count controls (NEW UI)
+                        if (constraint.mode === 'foldable') {
+                            const foldCountRow = document.createElement('div');
+                            foldCountRow.className = 'path-constraint-row';
+                            foldCountRow.style.marginTop = '8px';
+
+                            const foldCountLabel = document.createElement('div');
+                            foldCountLabel.textContent = 'Folds:';
+                            foldCountLabel.style.fontSize = '11px';
+                            foldCountLabel.style.marginBottom = '4px';
+                            foldCountLabel.style.color = '#999';
+
+                            const foldButtonGroup = document.createElement('div');
+                            foldButtonGroup.style.display = 'flex';
+                            foldButtonGroup.style.gap = '4px';
+
+                            const currentFoldCount = constraint.foldCount || 0;
+
+                            // Create buttons for 0, 1, 2 folds
+                            [0, 1, 2].forEach(count => {
+                                const btn = document.createElement('button');
+                                btn.textContent = count.toString();
+                                btn.className = 'fold-count-btn' + (currentFoldCount === count ? ' active' : '');
+                                btn.style.flex = '1';
+                                btn.style.padding = '4px 8px';
+                                btn.style.fontSize = '12px';
+                                btn.style.border = currentFoldCount === count ? '2px solid #4CAF50' : '1px solid #444';
+                                btn.style.background = currentFoldCount === count ? '#4CAF5022' : '#222';
+                                btn.style.color = currentFoldCount === count ? '#4CAF50' : '#999';
+                                btn.style.borderRadius = '4px';
+                                btn.style.cursor = 'pointer';
+                                btn.title = `${count} fold${count !== 1 ? 's' : ''}`;
+
+                                btn.addEventListener('click', () => {
+                                    this.changeFoldCount(component.id, constraint.targetComponentId, count);
+                                });
+
+                                foldButtonGroup.appendChild(btn);
+                            });
+
+                            foldCountRow.appendChild(foldCountLabel);
+                            foldCountRow.appendChild(foldButtonGroup);
+                            details.appendChild(foldCountRow);
+
+                            // Show mirror count if folds > 0
+                            if (currentFoldCount > 0) {
+                                const mirrorCountRow = document.createElement('div');
+                                mirrorCountRow.className = 'path-constraint-row';
+                                mirrorCountRow.style.fontSize = '11px';
+                                mirrorCountRow.style.color = '#666';
+                                mirrorCountRow.style.marginTop = '4px';
+
+                                const mirrorCount = (constraint.mirrorIds || []).length;
+                                mirrorCountRow.textContent = `${mirrorCount} mirror${mirrorCount !== 1 ? 's' : ''}`;
+
+                                details.appendChild(mirrorCountRow);
+                            }
+                        }
+
+                        item.appendChild(header);
+                        item.appendChild(details);
+                        pathLengthConstraintsList.appendChild(item);
+                    });
+                }
+            }
         } else if (selectionType === 'zone' && selectedZoneId) {
             // Show zone properties
             let zone = null;

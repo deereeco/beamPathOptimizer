@@ -2,7 +2,7 @@
 
 A web-based tool for designing and optimizing optical beam paths on a breadboard. Place optical components, connect them with laser beams, and use simulated annealing optimization to find optimal component placements.
 
-**Current Version: 1.6**
+**Current Version: 1.7**
 
 ## Features
 
@@ -10,7 +10,7 @@ A web-based tool for designing and optimizing optical beam paths on a breadboard
 - **Source** - Laser light source with configurable emission direction and optional light emission control
 - **Mirror** - Reflects beam at angles (45° or 135° by default)
 - **Beam Splitter** - Partially reflects and transmits light based on reflectance property; supports shallow angles (5-10°)
-- **Lens** - Transmits beam straight through; supports fixed path length constraints
+- **Lens** - Transmits beam straight through
 - **Waveplate** - Transmits beam straight through
 - **Filter** - Transmits beam straight through
 - **Detector** - Terminal component that receives light
@@ -61,12 +61,6 @@ Each component has checkboxes to relax constraints when needed:
 - **Snap to grid** - When checked, component positions snap to grid (default: ON)
 - **Allow any angle** - When checked, component can use any 15° increment (default: OFF)
 
-### Path Length Constraints
-For lenses and beam splitters, you can specify fixed distances:
-- **Input distance** - Fixed path length before the component
-- **Output distance** - Fixed path length after the component
-- **Reflected distance** - Fixed path length for reflected beam (beam splitters only)
-
 ### Alignment Constraints
 Create persistent alignment relationships between components:
 - **Vertical Alignment (V key)** - Select 2+ components and press V to align them vertically (same X coordinate)
@@ -89,7 +83,6 @@ Simulated annealing optimizer minimizes a weighted cost function:
 The optimizer respects all constraints:
 - Fixed components stay in place
 - Grid snapping is applied per-component
-- Fixed path lengths are maintained
 - **Relative beam angles are preserved** - When components move or rotate, their input/output beam angles relative to their own orientation are maintained
 
 ### Results View
