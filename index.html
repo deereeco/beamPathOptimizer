@@ -12,7 +12,7 @@
         <header id="toolbar">
             <div class="toolbar-left">
                 <span class="app-title">Beam Path Optimizer</span>
-                <span class="version-badge" id="app-version">V1.2</span>
+                <span class="version-badge" id="app-version">V1.9</span>
                 <button id="btn-new" class="toolbar-btn" title="New Project">New</button>
                 <button id="btn-open" class="toolbar-btn" title="Open Project">Open</button>
                 <button id="btn-save" class="toolbar-btn" title="Save Project">Save</button>
@@ -133,6 +133,167 @@
             </div>
         </div>
 
+        <!-- Keyboard Shortcuts Modal -->
+        <div id="shortcuts-modal" class="modal hidden">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>⌨️ Keyboard Shortcuts</h2>
+                    <button id="close-shortcuts" class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="shortcuts-search-container">
+                        <input type="text" id="shortcuts-search" class="shortcuts-search-input" placeholder="Search shortcuts... (e.g., 'V', 'pan', 'filter')">
+                        <span id="shortcuts-search-count" class="shortcuts-search-count"></span>
+                    </div>
+                    <div class="shortcuts-grid">
+                        <section class="shortcuts-section">
+                            <h3>Navigation</h3>
+                            <div class="shortcut-item">
+                                <kbd>V</kbd>
+                                <span>Select tool</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Right-Click</kbd> + <kbd>Drag</kbd>
+                                <span>Pan canvas</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Scroll Wheel</kbd>
+                                <span>Zoom at cursor</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>+</kbd> / <kbd>=</kbd>
+                                <span>Zoom in</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>-</kbd>
+                                <span>Zoom out</span>
+                            </div>
+                        </section>
+
+                        <section class="shortcuts-section">
+                            <h3>Place Components</h3>
+                            <div class="shortcut-item">
+                                <kbd>S</kbd>
+                                <span>Laser Source</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>M</kbd>
+                                <span>Mirror</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>B</kbd>
+                                <span>Beam Splitter</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>L</kbd>
+                                <span>Lens</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>W</kbd>
+                                <span>Waveplate</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>F</kbd>
+                                <span>Filter (when nothing selected)</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>D</kbd>
+                                <span>Detector</span>
+                            </div>
+                        </section>
+
+                        <section class="shortcuts-section">
+                            <h3>Beams & Laser</h3>
+                            <div class="shortcut-item">
+                                <kbd>C</kbd>
+                                <span>Manual Beam Mode</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>L</kbd>
+                                <span>Toggle Laser On/Off</span>
+                            </div>
+                        </section>
+
+                        <section class="shortcuts-section">
+                            <h3>Selection & Editing</h3>
+                            <div class="shortcut-item">
+                                <kbd>Click</kbd>
+                                <span>Select component</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Ctrl</kbd> + <kbd>Click</kbd>
+                                <span>Multi-select</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Drag</kbd>
+                                <span>Selection box</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>R</kbd>
+                                <span>Rotate selected 90°</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Delete</kbd> / <kbd>Backspace</kbd>
+                                <span>Delete selected</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Escape</kbd>
+                                <span>Clear selection</span>
+                            </div>
+                        </section>
+
+                        <section class="shortcuts-section">
+                            <h3>Alignment Constraints</h3>
+                            <div class="shortcut-item">
+                                <kbd>V</kbd>
+                                <span>Vertical constraint (2+ selected)</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>H</kbd>
+                                <span>Horizontal constraint (2+ selected)</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>U</kbd>
+                                <span>Remove all constraints</span>
+                            </div>
+                        </section>
+
+                        <section class="shortcuts-section">
+                            <h3>Component & Zone Properties</h3>
+                            <div class="shortcut-item">
+                                <kbd>F</kbd>
+                                <span>Toggle fixed/unfixed (components & zones)</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>K</kbd>
+                                <span>Toggle local keep-out zone (components only)</span>
+                            </div>
+                        </section>
+
+                        <section class="shortcuts-section">
+                            <h3>File & History</h3>
+                            <div class="shortcut-item">
+                                <kbd>Ctrl</kbd> + <kbd>S</kbd>
+                                <span>Save project</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Ctrl</kbd> + <kbd>Z</kbd>
+                                <span>Undo</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Ctrl</kbd> + <kbd>Y</kbd>
+                                <span>Redo</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd>
+                                <span>Redo (alternate)</span>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Main Content Area -->
         <main id="main-content">
             <!-- Left Panel - Tools -->
@@ -144,19 +305,16 @@
                             <span class="tool-icon">&#9654;</span>
                             <span class="tool-label">Select <span class="shortcut">(V)</span></span>
                         </button>
-                        <button class="tool-btn" data-tool="pan" title="Pan (H)">
-                            <span class="tool-icon">&#9995;</span>
-                            <span class="tool-label">Pan <span class="shortcut">(H)</span></span>
-                        </button>
                     </div>
+                    <div class="hint-text">Right-click + drag to pan canvas</div>
                 </section>
 
                 <section class="panel-section">
                     <h3>Beams</h3>
                     <div class="tool-group">
-                        <button class="tool-btn" data-tool="connect" title="Add Laser Beams (C)">
+                        <button class="tool-btn" data-tool="connect" title="Manual Beam Mode (C)">
                             <span class="tool-icon">&#10132;</span>
-                            <span class="tool-label">Add Beams <span class="shortcut">(C)</span></span>
+                            <span class="tool-label">Manual Beam Mode <span class="shortcut">(C)</span></span>
                         </button>
                     </div>
                     <div class="beam-propagation-toggle">
@@ -187,9 +345,9 @@
                             <span class="comp-icon beam_splitter"></span>
                             <span class="comp-label">Splitter <span class="shortcut">(B)</span></span>
                         </button>
-                        <button class="component-btn" data-component="lens" title="Lens (N)">
+                        <button class="component-btn" data-component="lens" title="Lens (L)">
                             <span class="comp-icon lens"></span>
-                            <span class="comp-label">Lens <span class="shortcut">(N)</span></span>
+                            <span class="comp-label">Lens <span class="shortcut">(L)</span></span>
                         </button>
                         <button class="component-btn" data-component="waveplate" title="Waveplate (W)">
                             <span class="comp-icon waveplate"></span>
@@ -209,9 +367,9 @@
                 <section class="panel-section">
                     <h3>Zones</h3>
                     <div class="tool-group">
-                        <button class="tool-btn" data-tool="keepout" title="Draw Keep-Out Zone">
+                        <button class="tool-btn" data-tool="keepout" title="Draw Global Keep-Out Zone">
                             <span class="tool-icon zone-keepout">&#9634;</span>
-                            <span class="tool-label">Keep-Out</span>
+                            <span class="tool-label">Global Keep-Out</span>
                         </button>
                         <button class="tool-btn" data-tool="mounting" title="Define Mounting Zone">
                             <span class="tool-icon zone-mount">&#9634;</span>
@@ -219,6 +377,12 @@
                         </button>
                     </div>
                 </section>
+
+                <div class="panel-bottom">
+                    <button id="btn-show-shortcuts" class="action-btn shortcuts-btn" title="View all keyboard shortcuts">
+                        ⌨️ Keyboard Shortcuts
+                    </button>
+                </div>
 
             </aside>
 
@@ -329,7 +493,7 @@
                             <div class="mount-zone-controls">
                                 <label class="mount-zone-toggle">
                                     <input type="checkbox" id="prop-mount-enabled">
-                                    <span>Enable keep-out zone for mount</span>
+                                    <span>Enable local keep-out zone</span>
                                 </label>
                                 <div class="mount-zone-details" id="mount-details-controls">
                                     <div class="mount-zone-row">
@@ -420,10 +584,10 @@
                                 <label>H: <input type="number" id="zone-prop-height" class="property-input small" min="1"> mm</label>
                             </div>
                         </div>
-                        <div class="property-group" id="zone-active-group">
-                            <label class="property-label">Active</label>
-                            <input type="checkbox" id="zone-prop-active" checked>
-                            <span class="checkbox-hint">Zone is enabled</span>
+                        <div class="property-group">
+                            <label class="property-label">Fixed</label>
+                            <input type="checkbox" id="zone-prop-fixed">
+                            <span class="checkbox-hint">Lock zone position <span class="shortcut">(F)</span></span>
                         </div>
                         <div class="property-actions">
                             <button id="btn-delete-zone" class="action-btn danger">Delete Zone</button>

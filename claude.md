@@ -11,17 +11,18 @@ A 2D GUI application for designing and visualizing laser beam paths on an optica
 ## Features
 
 ### Core Canvas & Components
-- HTML5 Canvas with pan (drag with shift or middle mouse) and zoom (scroll wheel)
+- HTML5 Canvas with pan (right-click + drag) and zoom (scroll wheel)
 - Grid background with major/minor lines
 - 7 component types: Source, Mirror, Beam Splitter, Lens, Waveplate, Filter, Detector
-- Click-to-place components from the toolbar palette
+- Drag-and-drop components from palette to canvas with visual preview
 - Drag components to reposition
 - Selection with click, multi-select with Ctrl+click or drag selection box
 - Property panel for editing selected component attributes
+- Searchable keyboard shortcuts modal (⌨️ button at bottom of left panel)
 
 ### Beam Paths
 - Graph-based beam path model (segments connect component ports)
-- "Connect" tool to draw beam connections between components
+- "Manual Beam Mode" tool to draw beam connections between components
 - Beam splitters create two output ports (reflected/transmitted) based on reflectance property
   - Adjustable reflectance (0-100%) controls which beams are created
   - 100% = reflected only, 0% = transmitted only, 50% = both (default)
@@ -32,12 +33,19 @@ A 2D GUI application for designing and visualizing laser beam paths on an optica
 - Direction arrows on beam segments
 
 ### Constraints & Zones
-- **Keep-out zones**: Rectangular areas where components cannot be placed (red, semi-transparent)
+- **Global Keep-Out Zones**: Rectangular areas where components cannot be placed (red, semi-transparent)
+  - Standalone zones placed from Zones section
+  - Can be fixed in place (F key or checkbox)
+  - Can be rotated (R key, 45° increments)
+  - Always active and enforced
 - **Mounting zone**: Target area for center of mass (green, semi-transparent)
-- **Component mount zones**: Per-component keep-out areas for physical mounts
+  - Can be fixed and rotated like global zones
+- **Local Keep-Out Zones**: Per-component keep-out areas for physical mounts
+  - Toggle with K key when component selected
   - Enable/disable per component
   - Separate X/Y padding (rectangular shape)
   - X/Y offset from component center
+  - Moves with component
 - Zones can be selected, moved, resized, and deleted
 - Constraint violation detection with status bar feedback
 
@@ -148,17 +156,18 @@ A 2D GUI application for designing and visualizing laser beam paths on an optica
 | Key | Action |
 |-----|--------|
 | V | Align 2+ selected components vertically (creates persistent constraint), or select tool if <2 selected |
-| H | Align 2+ selected components horizontally (creates persistent constraint), or pan tool if <2 selected |
+| H | Align 2+ selected components horizontally (creates persistent constraint) |
 | U | Remove all alignment constraints from selected component(s) |
-| C | Connect beam tool |
-| L | Toggle laser on/off |
-| R | Rotate selected components 90° clockwise |
+| F | Place filter (when nothing selected), OR toggle fixed/unfixed (when component/zone selected) |
+| K | Toggle local keep-out zone for selected component(s) |
+| C | Manual beam mode (connect beams) |
+| O | Toggle laser on/off |
+| R | Rotate selected components 90° clockwise, or zones 45° |
 | S | Place source (Ctrl+S = save) |
 | M | Place mirror |
 | B | Place beam splitter |
-| N | Place lens |
+| L | Place lens |
 | W | Place waveplate |
-| F | Place filter |
 | D | Place detector |
 | Delete/Backspace | Delete selected |
 | Escape | Clear selection, return to select tool |
@@ -166,8 +175,10 @@ A 2D GUI application for designing and visualizing laser beam paths on an optica
 | Ctrl+Y / Ctrl+Shift+Z | Redo |
 | +/= | Zoom in |
 | - | Zoom out |
-| Shift+drag | Pan canvas |
+| Right-click+drag | Pan canvas |
 | Scroll wheel | Zoom at cursor |
+
+**Searchable Shortcuts Modal**: Click "⌨️ Keyboard Shortcuts" button at bottom of left panel for full searchable list organized by category.
 
 ---
 
@@ -665,7 +676,233 @@ The optimization system was not working reliably and could cause unexpected beha
 
 ---
 
+## Phase 11: Bug Fixes & UI Enhancements - COMPLETED (V1.9)
+
+### Issue 1: Component Constraint Bug
+
+**Problem**: When component A was constrained to fixed component B, dragging A would incorrectly move B instead of keeping B fixed.
+
+**Solution**: Rewrote constraint enforcement in MOVE_COMPONENT reducer:
+- Phase 1: Check if moving component has constraints to fixed components
+- Phase 2: Force moving component's position to match fixed component's constraint axis
+- Result: Fixed components now act as anchors that don't move
+
+**Files Modified**:
+- `js/state.js` - Added constraint enforcement from fixed components in MOVE_COMPONENT
+
+### Issue 2: Components Getting Stuck at Canvas Edges
+
+**Problem**: Dragging components near canvas edges caused them to fly off to extreme positions, making them difficult to recover.
+
+**Root Cause**: Mouse cursor going outside canvas boundaries caused screen coordinates to become negative or exceed canvas dimensions.
+
+**Solution**: Added coordinate clamping in three mouse event handlers:
+```javascript
+screenX = Math.max(0, Math.min(this.canvas.width, screenX));
+screenY = Math.max(0, Math.min(this.canvas.height, screenY));
+```
+
+**Files Modified**:
+- `js/main.js` - Added clamping to handleMouseDown, handleMouseMove, handleMouseUp
+
+### Issue 3: Constraint Removal Bug (U Key)
+
+**Problem**: Pressing U to remove constraints only partially removed them due to stale state being used during iteration.
+
+**Solution**: Rewrote unconstrainSelectedComponents() with two-pass algorithm:
+1. Count constraints on selected components
+2. Iterate through ALL components and filter out any constraints referencing selected IDs
+3. Complete bidirectional removal without stale state issues
+
+**Files Modified**:
+- `js/main.js` - Rewrote unconstrainSelectedComponents() method
+
+### Issue 4: F and R Shortcuts Not Working for Zones
+
+**Problem**: F key (fix/unfix) and R key (rotate) didn't work when zones were selected.
+
+**Root Cause**: SELECT_ZONE action set `selectedIds: []` instead of populating the array.
+
+**Solution**: Modified SELECT_ZONE reducer to populate selectedIds with the zone ID:
+```javascript
+selectedIds: action.zoneId ? [action.zoneId] : []
+```
+
+**Files Modified**:
+- `js/state.js` - SELECT_ZONE action now populates selectedIds array
+
+### Feature 1: Searchable Keyboard Shortcuts Modal
+
+**Implementation**:
+- New "⌨️ Keyboard Shortcuts" button at bottom of left panel
+- Modal displays all shortcuts organized into 7 categories
+- Real-time search functionality:
+  - Search by key letter (e.g., "V", "Ctrl", "F")
+  - Search by description (e.g., "pan", "filter", "align")
+  - Case-insensitive partial matching
+  - Match counter shows "X matches"
+- Visual feedback:
+  - Matching shortcuts highlighted with green accent
+  - Matching text highlighted within descriptions
+  - Sections with no matches are hidden
+- Keyboard interaction:
+  - Auto-focus on search box when modal opens
+  - Escape clears search (press again to close modal)
+
+**Categories**:
+1. Navigation
+2. Place Components
+3. Beams & Laser
+4. Selection & Editing
+5. Alignment Constraints
+6. Component & Zone Properties
+7. File & History
+
+**Files Modified**:
+- `index.html` - Added shortcuts modal HTML (260 lines)
+- `css/styles.css` - Added modal styling, search box, highlighting (~100 lines)
+- `js/main.js` - Added setupShortcutsModal() and filterShortcuts() methods
+
+### Feature 2: Zone Nomenclature Clarity
+
+**Changes**:
+- Standalone zones: "Keep-Out Zones" → "Global Keep-Out Zones"
+- Component zones: "Mount Zones" → "Local Keep-Out Zones"
+
+**Updates Throughout**:
+- Left panel button: "Global Keep-Out"
+- Keyboard shortcuts modal
+- Toast messages
+- Property panel labels
+- Code comments
+
+**Files Modified**:
+- `index.html` - Updated button labels, tooltips, property labels
+- `js/main.js` - Updated toast messages, comments
+
+### Feature 3: Zone Fixing Support
+
+**Implementation**:
+- Added "Fixed" checkbox to zone properties panel
+- F key now toggles fix/unfix for zones
+- R key now rotates zones (45° increments)
+- Fixed zones cannot be dragged or rotated
+- Toast notifications for zone fix/unfix actions
+
+**Keyboard Shortcuts**:
+- F key works for components AND zones
+- R key works for components (90°) AND zones (45°)
+
+**Files Modified**:
+- `index.html` - Added Fixed checkbox to zone properties
+- `js/main.js` - Added zone-prop-fixed event listener
+- `js/main.js` - Updated F key section title to "Component & Zone Properties"
+
+### Feature 4: Simplified Panning
+
+**Removed**:
+- Pan tool (H key no longer switches to pan mode)
+- Shift+drag panning
+- Middle-click panning
+
+**Kept**:
+- Right-click + drag only
+
+**Changes**:
+- H key now only does horizontal alignment (when 2+ components selected)
+- Left panel shows hint: "Right-click + drag to pan canvas"
+- Removed pan tool button from Navigation section
+- Removed pan tool references from cursor logic
+
+**Files Modified**:
+- `index.html` - Removed pan tool button, added hint text
+- `js/main.js` - Simplified H key handler, updated panning trigger
+- `js/state.js` - Updated tool comment
+
+### Feature 5: Other UI Improvements
+
+**K Key Shortcut**:
+- Press K to toggle local keep-out zones for selected component(s)
+- Toast notification shows enabled/disabled count
+- Works with single or multiple selection
+
+**F Key Dual Functionality**:
+- When nothing selected: Places filter component
+- When component(s) selected: Toggles fixed/unfixed state
+- When zone(s) selected: Toggles zone fixed state
+
+**Lens Label Correction**:
+- Button now shows "(L)" instead of "(N)"
+- Shortcut always worked, just label was wrong
+
+**"Add Beams" Renamed**:
+- Button text: "Manual Beam Mode"
+- Tooltip: "Manual Beam Mode (C)"
+- Keyboard shortcuts modal updated
+
+**Active Property Removed**:
+- Removed "Active" checkbox from global keep-out zones
+- All zones now always active and enforced
+- Removed isActive checks from collision detection and rendering
+- Simplified zone creation (no longer sets isActive: true)
+
+**Files Modified**:
+- `index.html` - K key in shortcuts, F key description, lens label, Manual Beam Mode, removed Active checkbox
+- `js/main.js` - K key handler, F key logic, zone active references removed
+- `js/state.js` - Removed isActive checks in calculateConstraintViolations
+- `js/render/Renderer.js` - Removed isActive check in drawKeepOutZones
+
+### Files Modified Summary
+
+| File | Lines Changed | Changes |
+|------|---------------|---------|
+| `index.html` | ~270 | Shortcuts modal, zone labels, Fixed checkbox, removed Active |
+| `css/styles.css` | ~100 | Shortcuts modal styling, search box, highlighting |
+| `js/main.js` | ~180 | Mouse clamping, constraint fixes, shortcuts modal, K key, simplified panning |
+| `js/state.js` | ~15 | SELECT_ZONE fix, MOVE_COMPONENT constraint enforcement, removed isActive |
+| `js/render/Renderer.js` | ~1 | Removed isActive check |
+
+### All Phase 11 Features Complete ✅
+
+| Feature | Status |
+|---------|--------|
+| Component constraint bug fix | ✅ Completed |
+| Canvas edge stuck components fix | ✅ Completed |
+| Constraint removal bug fix | ✅ Completed |
+| Zone F/R shortcuts fix | ✅ Completed |
+| Searchable shortcuts modal | ✅ Completed |
+| Zone nomenclature clarity | ✅ Completed |
+| Zone fixing support | ✅ Completed |
+| K key for local keep-out zones | ✅ Completed |
+| Simplified panning | ✅ Completed |
+| F key dual functionality | ✅ Completed |
+| Active property removed | ✅ Completed |
+
+Version 1.9 released - see `versionlog.txt` for full changelog.
+
+---
+
 ## Version History
+
+### Version 1.9 (2025-12-05)
+**Bug Fixes:**
+- Fixed component constraint bug - components with constraints to fixed components now properly lock to anchor positions
+- Fixed components getting stuck at canvas edges - added coordinate clamping
+- Fixed constraint removal bug - U key now properly removes all constraints bidirectionally
+
+**UI/UX Improvements:**
+- Simplified panning to right-click only (removed pan tool, shift+drag, middle-click)
+- Corrected lens keyboard shortcut label from (N) to (L)
+- F key dual functionality - place filter or fix/unfix depending on selection
+- Renamed "Add Beams" to "Manual Beam Mode"
+
+**New Features:**
+- Searchable keyboard shortcuts modal with real-time filtering
+- K key shortcut to toggle local keep-out zones
+- Zone naming clarity - "Global Keep-Out Zones" vs "Local Keep-Out Zones"
+- Zone fixing support - F key and checkbox to fix zones in place
+- R key rotation for zones (45° increments)
+- Removed "Active" property from global keep-out zones (now always active)
 
 ### Version 1.8 (2025-12-05)
 **Code Cleanup:**

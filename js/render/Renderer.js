@@ -265,8 +265,6 @@ export class Renderer {
         const ctx = this.ctx;
 
         zones.forEach(zone => {
-            if (!zone.isActive) return;
-
             const zoneIdKey = `keepout:${zone.id}`;
             const isSelected = selectedZoneId === zoneIdKey;
             const isHovered = hoveredZoneId === zoneIdKey;

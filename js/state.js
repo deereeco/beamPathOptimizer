@@ -13,7 +13,7 @@ import * as BeamPhysics from './physics/BeamPhysics.js';
  */
 export const APP_VERSION = {
     major: 1,
-    minor: 8,
+    minor: 9,
     toString() {
         return `V${this.major}.${this.minor}`;
     },
@@ -155,7 +155,7 @@ export function createInitialState() {
 
         // UI state
         ui: {
-            tool: 'select', // select, pan, connect, keepout, mounting, [component types]
+            tool: 'select', // select, connect, keepout, mounting, [component types]
             viewport: {
                 panX: 0,
                 panY: 0,
@@ -270,7 +270,7 @@ export function checkConstraintViolations(components, constraints) {
     componentArray.forEach(comp => {
         // Check keep-out zones
         constraints.keepOutZones.forEach(zone => {
-            if (zone.isActive && componentOverlapsZone(comp, zone.bounds)) {
+            if (componentOverlapsZone(comp, zone.bounds)) {
                 violations.push({
                     type: 'keepout',
                     componentId: comp.id,
@@ -298,7 +298,7 @@ export function checkConstraintViolations(components, constraints) {
             if (mountBounds) {
                 // Check mount zone against keep-out zones
                 constraints.keepOutZones.forEach(zone => {
-                    if (zone.isActive && boundsOverlap(mountBounds, {
+                    if (boundsOverlap(mountBounds, {
                         minX: zone.bounds.x,
                         minY: zone.bounds.y,
                         maxX: zone.bounds.x + zone.bounds.width,
@@ -582,28 +582,52 @@ export function reducer(state, action) {
             if (!component) return state;
 
             newState.components = new Map(state.components);
+
+            // Determine the final position after applying constraints from fixed components
+            let finalPosition = { ...position };
+
+            // If this component has constraints to fixed components, enforce them
+            if (!skipConstraints && component.alignmentConstraints && component.alignmentConstraints.length > 0) {
+                component.alignmentConstraints.forEach(constraint => {
+                    const constrainedComponent = state.components.get(constraint.componentId);
+                    if (!constrainedComponent) return;
+
+                    // If constrained to a FIXED component, this component must match its position
+                    if (constrainedComponent.isFixed) {
+                        if (constraint.type === 'vertical') {
+                            // Vertical constraint: must match the fixed component's X
+                            finalPosition.x = constrainedComponent.position.x;
+                        } else if (constraint.type === 'horizontal') {
+                            // Horizontal constraint: must match the fixed component's Y
+                            finalPosition.y = constrainedComponent.position.y;
+                        }
+                    }
+                });
+            }
+
+            // Update the moved component with the constrained position
             const movedComponent = new Component(component.toJSON());
-            movedComponent.update({ position });
+            movedComponent.update({ position: finalPosition });
             newState.components.set(componentId, movedComponent);
 
-            // Apply alignment constraints (move constrained components too)
+            // Apply alignment constraints (move non-fixed constrained components too)
             // Skip if this move was triggered by a constraint (to avoid infinite loops)
             if (!skipConstraints && movedComponent.alignmentConstraints && movedComponent.alignmentConstraints.length > 0) {
-                const deltaX = position.x - component.position.x;
-                const deltaY = position.y - component.position.y;
-
                 movedComponent.alignmentConstraints.forEach(constraint => {
                     const constrainedComponent = newState.components.get(constraint.componentId);
                     if (!constrainedComponent) return;
+
+                    // Don't move fixed components - they act as anchors
+                    if (constrainedComponent.isFixed) return;
 
                     let newConstrainedPos = { ...constrainedComponent.position };
 
                     if (constraint.type === 'vertical') {
                         // Vertical alignment: match X coordinate
-                        newConstrainedPos.x = position.x;
+                        newConstrainedPos.x = finalPosition.x;
                     } else if (constraint.type === 'horizontal') {
                         // Horizontal alignment: match Y coordinate
-                        newConstrainedPos.y = position.y;
+                        newConstrainedPos.y = finalPosition.y;
                     }
 
                     // Move the constrained component (with skipConstraints to avoid loops)
@@ -872,7 +896,7 @@ export function reducer(state, action) {
                 selection: {
                     ...state.ui.selection,
                     type: action.zoneId ? 'zone' : null,
-                    selectedIds: [],
+                    selectedIds: action.zoneId ? [action.zoneId] : [],
                     selectedZoneId: action.zoneId
                 }
             };

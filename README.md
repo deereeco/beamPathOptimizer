@@ -2,7 +2,7 @@
 
 A web-based tool for designing and visualizing optical beam paths on a breadboard. Place optical components, connect them with laser beams, and use alignment constraints to organize your layout.
 
-**Current Version: 1.8**
+**Current Version: 1.9**
 
 ## Features
 
@@ -76,17 +76,31 @@ Create persistent alignment relationships between components:
 
 ### Zones
 - **Mounting Zone** - Target area for center of mass (green)
-- **Keep-out Zones** - Areas where components cannot be placed (red)
+  - Can be fixed in place with F key or Fixed checkbox
+  - Can be rotated with R key (45° increments)
+- **Global Keep-Out Zones** - Standalone zones where components cannot be placed (red)
+  - Place from Zones section in left panel
+  - Can be fixed in place and rotated like mounting zone
+  - Always active and enforced
+- **Local Keep-Out Zones** - Component-specific keep-out areas
+  - Toggle with K key when component selected
+  - Represents physical mount footprint
+  - Moves with component
+  - Adjustable padding and offset in properties panel
 
 ### UI Features
 - **Drag-and-drop** components from palette to canvas with visual preview
-- **Pan and zoom** navigation (scroll wheel, shift+drag, middle mouse)
+- **Pan and zoom** navigation (right-click + drag to pan, scroll wheel to zoom)
 - **Multi-select** components and beam segments (Ctrl+click or drag box)
 - **Resizable right panel** - drag divider to adjust width (180-400px)
 - **Adjustable text size** - slider at top of properties panel (80-150%)
+- **Searchable Keyboard Shortcuts** - Click "⌨️ Keyboard Shortcuts" button at bottom of left panel
+  - Search by key letter or action description
+  - Real-time filtering with match highlighting
+  - Organized by category (Navigation, Components, Beams, Editing, Constraints, etc.)
 - **Properties Panel** shows details for:
-  - Components (position, angle, size, physics properties)
-  - Zones (keep-out and mounting zones)
+  - Components (position, angle, size, physics properties, alignment constraints)
+  - Zones (keep-out and mounting zones, fixed state)
   - Beam Segments (source, target, length, wavelengths)
 - **Angle inputs limited to 0-180°** for easier use
 - Undo/Redo (Ctrl+Z / Ctrl+Shift+Z)
@@ -134,19 +148,25 @@ Components can be locked to prevent accidental changes:
 
 ### Keyboard Shortcuts
 - `V` - Align 2+ components vertically (or select tool if <2 selected)
-- `H` - Align 2+ components horizontally (or pan tool if <2 selected)
+- `H` - Align 2+ components horizontally (when 2+ selected)
 - `U` - Remove all alignment constraints from selected component(s)
-- `C` - Add Beams (connect) tool
+- `F` - Place filter (when nothing selected) OR toggle fixed/unfixed (when component/zone selected)
+- `K` - Toggle local keep-out zone for selected component(s)
+- `C` - Manual Beam Mode (connect beams)
 - `M` - Place mirror
 - `S` - Place source
-- `R` - Rotate selected component(s) 90° clockwise
-- `L` - Toggle laser on/off
+- `L` - Place lens
+- `R` - Rotate selected component(s)/zone(s) - 90° for components, 45° for zones
+- `O` - Toggle laser on/off
+- `Right-click + Drag` - Pan canvas
 - `Delete` / `Backspace` - Delete selected
 - `Ctrl+Z` - Undo
 - `Ctrl+Y` / `Ctrl+Shift+Z` - Redo
 - `Ctrl+S` - Save project
 - `+` / `-` - Zoom in/out
 - `Escape` - Cancel operation / Clear selection
+
+**Tip:** Click "⌨️ Keyboard Shortcuts" button in left panel to see all shortcuts with search!
 
 ## File Structure
 

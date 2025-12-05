@@ -90,6 +90,7 @@ class BeamPathOptimizerApp {
         this.canvas.addEventListener('mouseup', this.handleMouseUp);
         this.canvas.addEventListener('mouseleave', this.handleMouseUp);
         this.canvas.addEventListener('wheel', this.handleWheel, { passive: false });
+        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // Prevent right-click menu
         document.addEventListener('keydown', this.handleKeyDown);
     }
 
@@ -169,6 +170,9 @@ class BeamPathOptimizerApp {
 
         // Settings modal
         this.setupSettingsModal();
+
+        // Keyboard shortcuts modal
+        this.setupShortcutsModal();
 
         // Wavelength controls
         this.setupWavelengthControls();
@@ -355,7 +359,7 @@ class BeamPathOptimizerApp {
             });
         }
 
-        // Mount zone controls
+        // Local keep-out zone controls
         const mountEnabledCheckbox = document.getElementById('prop-mount-enabled');
         const mountDetailsControls = document.getElementById('mount-details-controls');
 
@@ -377,7 +381,7 @@ class BeamPathOptimizerApp {
             });
         }
 
-        // Mount zone padding X
+        // Local keep-out zone padding X
         document.getElementById('prop-mount-padding-x')?.addEventListener('change', (e) => {
             const state = this.store.getState();
             const selectedId = state.ui.selection.selectedIds[0];
@@ -389,7 +393,7 @@ class BeamPathOptimizerApp {
             }));
         });
 
-        // Mount zone padding Y
+        // Local keep-out zone padding Y
         document.getElementById('prop-mount-padding-y')?.addEventListener('change', (e) => {
             const state = this.store.getState();
             const selectedId = state.ui.selection.selectedIds[0];
@@ -401,7 +405,7 @@ class BeamPathOptimizerApp {
             }));
         });
 
-        // Mount zone offset X
+        // Local keep-out zone offset X
         document.getElementById('prop-mount-offset-x')?.addEventListener('change', (e) => {
             const state = this.store.getState();
             const selectedId = state.ui.selection.selectedIds[0];
@@ -413,7 +417,7 @@ class BeamPathOptimizerApp {
             }));
         });
 
-        // Mount zone offset Y
+        // Local keep-out zone offset Y
         document.getElementById('prop-mount-offset-y')?.addEventListener('change', (e) => {
             const state = this.store.getState();
             const selectedId = state.ui.selection.selectedIds[0];
@@ -797,6 +801,124 @@ class BeamPathOptimizerApp {
     }
 
     /**
+     * Set up keyboard shortcuts modal
+     */
+    setupShortcutsModal() {
+        const modal = document.getElementById('shortcuts-modal');
+        const btnShowShortcuts = document.getElementById('btn-show-shortcuts');
+        const btnClose = document.getElementById('close-shortcuts');
+        const searchInput = document.getElementById('shortcuts-search');
+        const searchCount = document.getElementById('shortcuts-search-count');
+
+        // Open modal
+        btnShowShortcuts?.addEventListener('click', () => {
+            modal?.classList.remove('hidden');
+            // Clear search and focus search box
+            if (searchInput) {
+                searchInput.value = '';
+                this.filterShortcuts('');
+                setTimeout(() => searchInput.focus(), 100);
+            }
+        });
+
+        // Close modal
+        btnClose?.addEventListener('click', () => {
+            modal?.classList.add('hidden');
+        });
+
+        // Close on backdrop click
+        modal?.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        });
+
+        // Close on Escape key (but not when focused in search)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal?.classList.contains('hidden')) {
+                // If search has focus and has text, clear it; otherwise close modal
+                if (document.activeElement === searchInput && searchInput.value) {
+                    searchInput.value = '';
+                    this.filterShortcuts('');
+                } else {
+                    modal.classList.add('hidden');
+                }
+            }
+        });
+
+        // Search functionality
+        searchInput?.addEventListener('input', (e) => {
+            const query = e.target.value;
+            const matchCount = this.filterShortcuts(query);
+
+            // Update count display
+            if (searchCount) {
+                if (query) {
+                    searchCount.textContent = `${matchCount} match${matchCount !== 1 ? 'es' : ''}`;
+                } else {
+                    searchCount.textContent = '';
+                }
+            }
+        });
+    }
+
+    /**
+     * Filter keyboard shortcuts based on search query
+     */
+    filterShortcuts(query) {
+        const sections = document.querySelectorAll('.shortcuts-section');
+        const normalizedQuery = query.toLowerCase().trim();
+        let totalMatches = 0;
+
+        sections.forEach(section => {
+            const items = section.querySelectorAll('.shortcut-item');
+            let sectionHasMatches = false;
+
+            items.forEach(item => {
+                // Get the shortcut keys and description
+                const keys = Array.from(item.querySelectorAll('kbd')).map(k => k.textContent.toLowerCase());
+                const description = item.querySelector('span')?.textContent.toLowerCase() || '';
+
+                // Check if query matches keys or description
+                const matchesKey = keys.some(key => key.includes(normalizedQuery));
+                const matchesDescription = description.includes(normalizedQuery);
+                const matches = !query || matchesKey || matchesDescription;
+
+                if (matches) {
+                    item.classList.remove('hidden');
+                    item.classList.add('highlighted');
+                    sectionHasMatches = true;
+                    totalMatches++;
+
+                    // Highlight matching text in description
+                    const descSpan = item.querySelector('span');
+                    if (descSpan && query) {
+                        const originalText = descSpan.textContent;
+                        const regex = new RegExp(`(${normalizedQuery})`, 'gi');
+                        const highlightedText = originalText.replace(regex, '<mark class="search-match">$1</mark>');
+                        descSpan.innerHTML = highlightedText;
+                    } else if (descSpan) {
+                        // Reset to plain text when no query
+                        descSpan.textContent = descSpan.textContent;
+                    }
+                } else {
+                    item.classList.add('hidden');
+                    item.classList.remove('highlighted');
+                }
+            });
+
+            // Hide section if no matches
+            if (sectionHasMatches || !query) {
+                section.classList.remove('hidden');
+            } else {
+                section.classList.add('hidden');
+            }
+        });
+
+        return totalMatches;
+    }
+
+    /**
      * Set up wavelength controls
      */
     setupWavelengthControls() {
@@ -1112,14 +1234,21 @@ class BeamPathOptimizerApp {
             }
         });
 
-        // Zone active (keep-out zones only)
-        document.getElementById('zone-prop-active')?.addEventListener('change', (e) => {
+        // Zone fixed
+        document.getElementById('zone-prop-fixed')?.addEventListener('change', (e) => {
             const state = this.store.getState();
             const zoneId = state.ui.selection.selectedZoneId;
-            if (!zoneId || !zoneId.startsWith('keepout:')) return;
+            if (!zoneId) return;
 
-            const id = zoneId.replace('keepout:', '');
-            this.store.dispatch(actions.updateKeepOutZone(id, { isActive: e.target.checked }));
+            const isFixed = e.target.checked;
+            if (zoneId === 'mounting') {
+                this.store.dispatch(actions.updateMountingZone({ isFixed }));
+                this.showToast(`Mounting zone ${isFixed ? 'fixed' : 'unfixed'}`, 'info');
+            } else if (zoneId.startsWith('keepout:')) {
+                const id = zoneId.replace('keepout:', '');
+                this.store.dispatch(actions.updateKeepOutZone(id, { isFixed }));
+                this.showToast(`Global keep-out zone ${isFixed ? 'fixed' : 'unfixed'}`, 'info');
+            }
         });
 
         // Delete zone button
@@ -1176,8 +1305,7 @@ class BeamPathOptimizerApp {
         });
 
         // Update cursor
-        this.canvas.style.cursor = tool === 'pan' ? 'grab' :
-                                   tool === 'select' ? 'default' : 'crosshair';
+        this.canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
     }
 
     /**
@@ -1195,8 +1323,11 @@ class BeamPathOptimizerApp {
     handleMouseDown(e) {
         const state = this.store.getState();
         const rect = this.canvas.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
+        // Clamp screen coordinates to canvas bounds
+        let screenX = e.clientX - rect.left;
+        let screenY = e.clientY - rect.top;
+        screenX = Math.max(0, Math.min(this.canvas.width, screenX));
+        screenY = Math.max(0, Math.min(this.canvas.height, screenY));
         const worldPos = this.renderer.screenToWorld(screenX, screenY, state.ui.viewport);
 
         const tool = state.ui.tool;
@@ -1206,8 +1337,8 @@ class BeamPathOptimizerApp {
         // Check if clicking on a zone
         const clickedZone = this.getZoneAtPosition(worldPos.x, worldPos.y);
 
-        if (tool === 'pan' || (e.button === 1) || (e.button === 0 && e.shiftKey && !e.ctrlKey)) {
-            // Start panning
+        if (e.button === 2) {
+            // Start panning (right mouse button only)
             this.isPanning = true;
             this.panStart = { x: screenX, y: screenY };
             this.canvas.style.cursor = 'grabbing';
@@ -1357,7 +1488,7 @@ class BeamPathOptimizerApp {
                 }
             }
         } else if (tool === 'keepout') {
-            // Start drawing keep-out zone
+            // Start drawing global keep-out zone
             this.zoneStart = worldPos;
         } else if (tool === 'mounting') {
             // Start drawing mounting zone
@@ -1374,8 +1505,12 @@ class BeamPathOptimizerApp {
     handleMouseMove(e) {
         const state = this.store.getState();
         const rect = this.canvas.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
+        // Clamp screen coordinates to canvas bounds to prevent components from flying off
+        // when mouse goes outside canvas during dragging
+        let screenX = e.clientX - rect.left;
+        let screenY = e.clientY - rect.top;
+        screenX = Math.max(0, Math.min(this.canvas.width, screenX));
+        screenY = Math.max(0, Math.min(this.canvas.height, screenY));
         const worldPos = this.renderer.screenToWorld(screenX, screenY, state.ui.viewport);
 
         // Update cursor position in status bar
@@ -1492,13 +1627,16 @@ class BeamPathOptimizerApp {
     handleMouseUp(e) {
         const state = this.store.getState();
         const rect = this.canvas.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
+        // Clamp screen coordinates to canvas bounds
+        let screenX = e.clientX - rect.left;
+        let screenY = e.clientY - rect.top;
+        screenX = Math.max(0, Math.min(this.canvas.width, screenX));
+        screenY = Math.max(0, Math.min(this.canvas.height, screenY));
         const worldPos = this.renderer.screenToWorld(screenX, screenY, state.ui.viewport);
 
         if (this.isPanning) {
             this.isPanning = false;
-            this.canvas.style.cursor = state.ui.tool === 'pan' ? 'grab' : 'default';
+            this.canvas.style.cursor = 'default';
         }
 
         if (this.isDragging) {
@@ -1590,8 +1728,7 @@ class BeamPathOptimizerApp {
                     height: Math.abs(worldPos.y - this.zoneStart.y)
                 },
                 rotation: 0,  // Rotation angle in degrees (45° increments)
-                isFixed: false,  // Whether zone location is fixed
-                isActive: true
+                isFixed: false  // Whether zone location is fixed
             };
 
             if (zone.bounds.width > 10 && zone.bounds.height > 10) {
@@ -1659,11 +1796,9 @@ class BeamPathOptimizerApp {
                 break;
             case 'h':
             case 'H':
-                // If 2+ components selected, align horizontally; otherwise switch to pan tool
+                // Align horizontally if 2+ components selected
                 if (state.ui.selection.selectedIds.length >= 2) {
                     this.alignComponentsHorizontally();
-                } else {
-                    this.setTool('pan');
                 }
                 break;
             case 'c':
@@ -1688,7 +1823,12 @@ class BeamPathOptimizerApp {
                 break;
             case 'f':
             case 'F':
-                this.toggleFixSelected();
+                // If components or zones are selected, toggle fix; otherwise place filter
+                if (state.ui.selection.selectedIds.length > 0) {
+                    this.toggleFixSelected();
+                } else {
+                    this.startPlacingComponent(ComponentType.FILTER);
+                }
                 break;
             case 'm':
             case 'M':
@@ -1715,6 +1855,10 @@ class BeamPathOptimizerApp {
             case 'I':
                 this.startPlacingComponent(ComponentType.FILTER);
                 break;
+            case 'k':
+            case 'K':
+                this.toggleMountZoneSelected();
+                break;
             case 'd':
             case 'D':
                 this.startPlacingComponent(ComponentType.DETECTOR);
@@ -1736,7 +1880,7 @@ class BeamPathOptimizerApp {
                         this.undo();
                     }
                 } else {
-                    // Toggle mount zone for selected components
+                    // Toggle local keep-out zone for selected components
                     this.toggleMountZoneSelected();
                 }
                 break;
@@ -1789,9 +1933,8 @@ class BeamPathOptimizerApp {
             }
         }
 
-        // Check keep-out zones
+        // Check global keep-out zones
         for (const zone of state.constraints.keepOutZones) {
-            if (!zone.isActive) continue;
             const b = zone.bounds;
             if (x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height) {
                 return { type: 'keepout', id: `keepout:${zone.id}`, zone };
@@ -2467,7 +2610,7 @@ class BeamPathOptimizerApp {
                     if (zone) {
                         const newFixed = !zone.isFixed;
                         this.store.dispatch(actions.updateKeepOutZone(id, { isFixed: newFixed }));
-                        this.showToast(`Keep-out zone ${newFixed ? 'fixed' : 'unfixed'}`, 'info');
+                        this.showToast(`Global keep-out zone ${newFixed ? 'fixed' : 'unfixed'}`, 'info');
                     }
                 }
             });
@@ -2507,7 +2650,7 @@ class BeamPathOptimizerApp {
     }
 
     /**
-     * Toggle mount zone enabled state for selected components
+     * Toggle local keep-out zone enabled state for selected components
      */
     toggleMountZoneSelected() {
         const state = this.store.getState();
@@ -2541,9 +2684,9 @@ class BeamPathOptimizerApp {
             });
 
             if (enabledCount > 0) {
-                this.showToast(`Enabled mount zone for ${enabledCount} component(s)`, 'info');
+                this.showToast(`Enabled local keep-out zone for ${enabledCount} component(s)`, 'info');
             } else if (disabledCount > 0) {
-                this.showToast(`Disabled mount zone for ${disabledCount} component(s)`, 'info');
+                this.showToast(`Disabled local keep-out zone for ${disabledCount} component(s)`, 'info');
             }
         }
     }
@@ -2777,41 +2920,39 @@ class BeamPathOptimizerApp {
             return;
         }
 
+        const selectedIds = [...state.ui.selection.selectedIds];
         let totalRemoved = 0;
 
-        // For each selected component, remove all its alignment constraints
-        state.ui.selection.selectedIds.forEach(componentId => {
+        // First pass: count and collect all constraints to remove
+        selectedIds.forEach(componentId => {
             const component = state.components.get(componentId);
-            if (!component || !component.alignmentConstraints || component.alignmentConstraints.length === 0) {
+            if (component && component.alignmentConstraints) {
+                totalRemoved += component.alignmentConstraints.length;
+            }
+        });
+
+        // Second pass: remove all constraints involving selected components from ALL components
+        state.components.forEach((component, componentId) => {
+            if (!component.alignmentConstraints || component.alignmentConstraints.length === 0) {
                 return;
             }
 
-            const constraintsToRemove = [...component.alignmentConstraints];
-            totalRemoved += constraintsToRemove.length;
+            // Filter out any constraints that reference selected components
+            const updatedConstraints = component.alignmentConstraints.filter(constraint =>
+                !selectedIds.includes(constraint.componentId)
+            );
 
-            // Remove constraints bidirectionally
-            constraintsToRemove.forEach(constraint => {
-                const otherComponent = state.components.get(constraint.componentId);
-                if (otherComponent && otherComponent.alignmentConstraints) {
-                    // Remove the reverse constraint from the other component
-                    const updatedOtherConstraints = otherComponent.alignmentConstraints.filter(c =>
-                        c.componentId !== componentId || c.type !== constraint.type
-                    );
-                    this.store.dispatch(actions.updateComponent(constraint.componentId, {
-                        alignmentConstraints: updatedOtherConstraints
-                    }));
-                }
-            });
-
-            // Clear all constraints from this component
-            this.store.dispatch(actions.updateComponent(componentId, {
-                alignmentConstraints: []
-            }));
+            // If constraints changed, update the component
+            if (updatedConstraints.length !== component.alignmentConstraints.length) {
+                this.store.dispatch(actions.updateComponent(componentId, {
+                    alignmentConstraints: updatedConstraints
+                }));
+            }
         });
 
         if (totalRemoved > 0) {
-            const componentText = state.ui.selection.selectedIds.length === 1 ? 'component' : 'components';
-            this.showToast(`Removed ${totalRemoved} constraint(s) from ${state.ui.selection.selectedIds.length} ${componentText}`, 'success');
+            const componentText = selectedIds.length === 1 ? 'component' : 'components';
+            this.showToast(`Removed ${totalRemoved} constraint(s) from ${selectedIds.length} ${componentText}`, 'success');
         } else {
             this.showToast('No constraints to remove', 'info');
         }
@@ -3327,7 +3468,7 @@ class BeamPathOptimizerApp {
                 opticalProps.classList.add('hidden');
             }
 
-            // Mount zone controls
+            // Local keep-out zone controls
             const mountEnabled = component.mountZone?.enabled || false;
             const mountPaddingX = component.mountZone?.paddingX ?? component.mountZone?.padding ?? 10;
             const mountPaddingY = component.mountZone?.paddingY ?? component.mountZone?.padding ?? 10;
@@ -3445,13 +3586,10 @@ class BeamPathOptimizerApp {
                 document.getElementById('zone-prop-width').value = zone.bounds.width.toFixed(1);
                 document.getElementById('zone-prop-height').value = zone.bounds.height.toFixed(1);
 
-                // Active checkbox only for keep-out zones
-                const activeGroup = document.getElementById('zone-active-group');
-                if (selectedZoneId.startsWith('keepout:')) {
-                    activeGroup.classList.remove('hidden');
-                    document.getElementById('zone-prop-active').checked = zone.isActive;
-                } else {
-                    activeGroup.classList.add('hidden');
+                // Fixed checkbox for all zones
+                const fixedCheckbox = document.getElementById('zone-prop-fixed');
+                if (fixedCheckbox) {
+                    fixedCheckbox.checked = zone.isFixed || false;
                 }
             } else {
                 noSelection.classList.remove('hidden');

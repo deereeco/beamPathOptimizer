@@ -1,6 +1,133 @@
 BEAM PATH OPTIMIZER - VERSION LOG
 ================================================================================
 
+Version 1.9 (2025-12-05)
+--------------------------------------------------------------------------------
+Bug Fixes:
+
+  • Fixed Component Constraint Bug
+    - Components with constraints to fixed components now properly lock to anchor positions
+    - Issue: When component A was constrained to fixed component B, dragging A would move B
+    - Solution: Added logic to enforce constraints FROM fixed components TO moving component
+    - Moving component's position now forced to match fixed component's constraint axis
+    - Fixed components act as anchors that don't move
+
+  • Fixed Components Getting Stuck at Canvas Edges
+    - Components no longer fly off to extreme positions when dragged near edges
+    - Issue: Mouse cursor going outside canvas caused huge negative/positive coordinates
+    - Solution: Added coordinate clamping in handleMouseDown/Move/Up
+    - Screen coordinates now clamped to [0, canvas.width/height]
+    - Smooth dragging behavior even at canvas boundaries
+
+  • Fixed Constraint Removal Bug (U Key)
+    - U key now properly removes ALL constraints from all components
+    - Issue: Used stale state when looping, only partially removed constraints
+    - Solution: Two-pass algorithm - iterate all components and filter out selected IDs
+    - Complete bidirectional constraint removal
+    - No orphaned constraints remain
+
+UI/UX Improvements:
+
+  • Simplified Panning to Right-Click Only
+    - Removed Pan tool (H key no longer switches to pan mode)
+    - Removed Shift+drag panning
+    - Removed Middle-click panning
+    - Kept only: Right-click + drag to pan
+    - Left panel now shows hint text: "Right-click + drag to pan canvas"
+    - H key now only does horizontal alignment (when 2+ components selected)
+
+  • Corrected Lens Keyboard Shortcut Label
+    - Lens button now correctly shows "(L)" instead of "(N)"
+    - Shortcut always worked, just label was wrong
+
+  • F Key Dual Functionality
+    - When nothing selected: Places filter component
+    - When component(s) selected: Toggles fixed/unfixed state
+    - When zone(s) selected: Toggles zone fixed/unfixed state
+    - Context-aware behavior reduces shortcut conflicts
+
+  • Renamed "Add Beams" to "Manual Beam Mode"
+    - Clearer indication that this is a mode for manually drawing beams
+    - Button text and tooltip updated
+    - Keyboard shortcuts modal updated
+
+New Features:
+
+  • Searchable Keyboard Shortcuts Modal
+    - New "⌨️ Keyboard Shortcuts" button at bottom of left panel
+    - Opens comprehensive modal with all shortcuts organized by category
+    - Real-time search functionality:
+      * Search by key letter (e.g., "V", "F", "Ctrl")
+      * Search by action description (e.g., "pan", "filter", "align")
+      * Case-insensitive partial matching
+      * Match counter shows "X matches" in real-time
+    - Matching shortcuts highlighted with green accent
+    - Matching text highlighted within descriptions
+    - Sections with no matches are hidden
+    - Auto-focus on search box when modal opens
+    - Press Escape to clear search (press again to close modal)
+    - Categories: Navigation, Place Components, Beams & Laser, Selection & Editing,
+                  Alignment Constraints, Component & Zone Properties, File & History
+
+  • K Key Shortcut for Local Keep-Out Zones
+    - Press K with component(s) selected to toggle local keep-out zones
+    - Shows toast: "Enabled/Disabled local keep-out zone for X component(s)"
+    - Works with single or multiple selection
+    - Component's mount zone acts as physical footprint
+
+  • Zone Naming Clarity
+    - Standalone zones renamed to "Global Keep-Out Zones"
+    - Component zones renamed to "Local Keep-Out Zones"
+    - Clear distinction in all UI text and tooltips
+    - Updated keyboard shortcuts modal section names
+    - Toast messages use new terminology
+
+  • Zone Fixing Support
+    - Added "Fixed" checkbox to zone properties panel
+    - F key now works to fix/unfix zones (when zone selected)
+    - R key now works to rotate zones in 45° increments (when zone selected)
+    - Fixed zones cannot be dragged or rotated
+    - Toast notifications for zone fix/unfix actions
+    - Works for both global keep-out zones and mounting zone
+    - Checkbox shows "(F)" shortcut hint
+
+  • Removed "Active" Property from Global Keep-Out Zones
+    - All global keep-out zones are now always active
+    - Removed "Active" checkbox from zone properties panel
+    - Removed isActive checks from collision detection
+    - Removed isActive checks from rendering
+    - Simplified zone creation (no longer sets isActive: true)
+    - Zones are always visible and enforced
+
+Technical Changes:
+
+  • Version bumped to 1.9
+  • Zone selection fix: SELECT_ZONE now populates selectedIds array
+    - Enables F and R shortcuts to work with zones
+    - selectedIds: [zoneId] instead of []
+  • Coordinate clamping added to mouse event handlers (3 locations)
+  • Constraint enforcement logic rewritten in MOVE_COMPONENT reducer
+  • Unconstrain logic rewritten to iterate all components
+  • Keyboard shortcuts modal HTML structure added (260 lines)
+  • Shortcuts search functionality with filterShortcuts() method
+  • CSS for shortcuts modal, search box, and highlighting (~100 lines)
+  • Removed pan tool references from state, main.js, and cursor logic
+  • Zone property UI updated: removed Active, added Fixed
+  • Event listener for zone-prop-fixed checkbox
+  • Removed isActive from zone creation, detection, validation, rendering
+
+Files Modified:
+  • js/state.js - Version to 1.9, SELECT_ZONE populates selectedIds, MOVE_COMPONENT
+    constraint enforcement, removed isActive checks in calculateConstraintViolations
+  • js/main.js - Coordinate clamping (3 handlers), unconstrainSelectedComponents rewrite,
+    F key logic, H key simplified, shortcuts modal setup, K key handler
+  • js/render/Renderer.js - Removed isActive check from drawKeepOutZones
+  • index.html - Version badge to V1.9, shortcuts modal (260 lines), Fixed checkbox,
+    removed Active checkbox, Pan tool removed, lens label corrected, Manual Beam Mode
+  • css/styles.css - Shortcuts modal styling, search box, highlighting, hint-text style
+
+================================================================================
+
 Version 1.8 (2025-12-05)
 --------------------------------------------------------------------------------
 Breaking Changes:
